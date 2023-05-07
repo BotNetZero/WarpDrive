@@ -1,5 +1,5 @@
 # WarpDrive
-a LLM training engine
+a LLM training engine under heterogenous environment
 
 ## tasks:
 1. distributed communication :white_check_mark:
