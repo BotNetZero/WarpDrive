@@ -16,7 +16,6 @@ class NCCLCommunicator:
 		self.grp_size = grp_size
 		self.pg = None
 
-
 	def send(self, send_stream, tensor, dst_rank):
 		"""
 		execute send task under send_stream ctrl
