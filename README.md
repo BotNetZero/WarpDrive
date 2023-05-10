@@ -3,14 +3,22 @@ a LLM training engine under CS(Client-Server) environment
 
 ## tasks:
 1. :building_construction: topology:
-- :white_check_mark: cluster mode
-- :building_construction: CS mode
-2. :building_construction: distributed communication
+	- :white_check_mark: cluster mode
+	- :building_construction: CS mode
+2. :white_check_mark: distributed communication
 3. :building_construction: pipeline parallel 
 	- :building_construction: sequence pipeline schedule
 4. :stop_sign: data parallel
 5. :stop_sign: tensor parallel
 6. :stop_sign: sequence parallel
+7. :building_construction: training data (open source)
+	- :white_check_mark: OIG
+	- pile
+8. :building_construction: llm training
+	- :building_construction: pretrain
+	- :stop_sign: RLHF
+	- :stop_sign: AIHF
+9. :stop_sign: llm evaluation
 
 
 ## GPUs topology
@@ -60,3 +68,5 @@ dpg: [(1,2,3), (4,5,6)]
 	- 1f1b w/o interleave
 	- 1f1b with interleave
 
+## training data
+Open source training data

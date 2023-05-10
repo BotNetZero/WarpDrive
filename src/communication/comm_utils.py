@@ -2,17 +2,20 @@
 """
 Author        : Di Niu
 CreatedDate   : 2023/05/05
-Description   : 
+Description   :
 """
 from datetime import datetime
 import torch
 import torch.cuda as cuda
 import torch.distributed as dist
 from src.common.logger import logger
-from src.communication.nccl_backend import NCCLCommunicator
+from communication.communicator import Communicator
+
+
+_MAIN_GROUP_COMM = None
 
 _PIPELINE_PARALLEL_GROUP = None
-_PIPELINE_PARALLEL_RANKS = None 
+_PIPELINE_PARALLEL_RANKS = None
 _PIPELINE_PARALLEL_WORLD_SIZE = None
 
 _DATA_PARALLEL_GROUP = None
@@ -24,11 +27,18 @@ _TENSOR_PARALLEL_RANKS = None
 _TENSOR_PARALLEL_WORLD_SIZE = None
 
 
+def get_main_group_comm():
+	assert _MAIN_GROUP_COMM is not None
+	return _MAIN_GROUP_COMM
+
 def get_pp_group():
 	assert _PIPELINE_PARALLEL_GROUP is not None
 	return _PIPELINE_PARALLEL_GROUP
 
 def get_pp_ranks():
+	"""
+	global ranks
+	"""
 	assert _PIPELINE_PARALLEL_RANKS is not None
 	return _PIPELINE_PARALLEL_RANKS
 
@@ -36,17 +46,41 @@ def get_pp_world_size():
 	assert _PIPELINE_PARALLEL_WORLD_SIZE is not None
 	return _PIPELINE_PARALLEL_WORLD_SIZE
 
+def get_pp_prev_global_rank(main_group=None):
+	"""
+	previous rank in ppg
+	"""
+	pp_ranks = get_pp_ranks()
+	current_global_rank = dist.get_rank(group=main_group)	#
+	current_group_rank = pp_ranks.index(current_global_rank)
+	if current_group_rank == 0:
+		return None
+	else:
+		return pp_ranks[current_group_rank-1]
+
+def get_pp_next_global_rank(main_group=None):
+	"""
+	next rank in ppg
+	"""
+	pp_ranks = get_pp_ranks()
+	current_global_rank = dist.get_rank(group=main_group)	#
+	current_group_rank = pp_ranks.index(current_global_rank)
+	if current_group_rank == len(pp_ranks)-1:
+		return None
+	else:
+		return pp_ranks[current_group_rank+1]
+
 
 def init_distributed_env(args):
 	"""
-	initialize torch.distributed DEFAULT PG
+	initialize distributed process group with main group and sub group
 	"""
 	device_count = cuda.device_count()
 
 	# ignore data parallel, tensor parallel now....
 	if args.data_group_size > 1 or args.tensor_group_size > 1:
 		raise ValueError(f"Not support data parallel and tensor parallel YET....")
-	
+
 	# init args check
 	if args.mode.lower() not in ("cluster", "cs"):
 		raise ValueError(f"Current mode [{args.mode}] no support. Available modes: cluster, CS")
@@ -57,13 +91,16 @@ def init_distributed_env(args):
 
 	if args.dp_backend.lower() == "nccl" and args.data_group_size*args.tensor_group_size > device_count:
 		raise ValueError(f"At stage [{args.stage}], GPUs [{device_count}] < data_group_size [{args.data_group_size}] x tensor_group_size [{args.tensor_group_size}]")
-	
+
 	if args.local_rank >= args.data_group_size:
 		raise ValueError(f"local rank [{args.local_rank}] is larger than data_group_size [{args.data_group_size}]")
 
 	# init main PG
-	init_main_pg(args.pp_backend, args.global_rank, args.world_size, args.dist_url, args.group_name)
+	_init_main_pg(args.pp_backend, args.global_rank, args.world_size, args.dist_url, args.group_name)
 	cuda.set_device(args.cuda_id)	# cuda_id --> global_rank
+
+	global _MAIN_GROUP_COMM
+	_MAIN_GROUP_COMM = Communicator(args.cuda_id, args.global_rank, pg=None)
 
 	# set pipeline, data parallel vars
 	global _PIPELINE_PARALLEL_WORLD_SIZE
@@ -74,23 +111,63 @@ def init_distributed_env(args):
 	ppg_ranks, dpg_ranks, tpg_ranks = rank_topology(args)
 
 	_PIPELINE_PARALLEL_WORLD_SIZE = args.pipeline_group_size
-	init_pipeline_parallel_group(args.pp_backend, ppg_ranks, args.global_rank)
-	
+	_init_pipeline_parallel_group(args.pp_backend, ppg_ranks, args.global_rank)
+
 	if args.data_group_size > 1:
 		_DATA_PARALLEL_WORLD_SIZE = args.data_group_size
-		init_data_parallel_group(args.dp_backend, dpg_ranks, args.global_rank)
+		_init_data_parallel_group(args.dp_backend, dpg_ranks, args.global_rank)
 
 	if args.tensor_group_size > 1:
 		_TENSOR_PARALLEL_WORLD_SIZE = args.tensor_group_size
-		init_tensor_parallel_group(args.tp_backend, tpg_ranks, args.global_rank)
+		_init_tensor_parallel_group(args.tp_backend, tpg_ranks, args.global_rank)
+
+
+
+def destroy_distributed_env(main_group_name=None):
+	"""
+
+	"""
+	# simple version
+	dist.destroy_process_group()
+
+	global _MAIN_GROUP_COMM
+	_MAIN_GROUP_COMM = None
+
+	global _PIPELINE_PARALLEL_GROUP
+	_PIPELINE_PARALLEL_GROUP = None
+
+	global _PIPELINE_PARALLEL_RANKS
+	_PIPELINE_PARALLEL_RANKS = None
+
+	global _PIPELINE_PARALLEL_WORLD_SIZE
+	_PIPELINE_PARALLEL_WORLD_SIZE = None
+
+	global _DATA_PARALLEL_GROUP
+	_DATA_PARALLEL_GROUP = None
+
+	global _DATA_PARALLEL_RANKS
+	_DATA_PARALLEL_RANKS = None
+
+	global _DATA_PARALLEL_WORLD_SIZE
+	_DATA_PARALLEL_WORLD_SIZE = None
+
+	global _TENSOR_PARALLEL_GROUP
+	_TENSOR_PARALLEL_GROUP = None
+
+	global _TENSOR_PARALLEL_RANKS
+	_TENSOR_PARALLEL_RANKS = None
+
+	global _TENSOR_PARALLEL_WORLD_SIZE
+	_TENSOR_PARALLEL_WORLD_SIZE = None
+
 
 def rank_topology(args):
 	"""
 	分配每个GPU的global rank和group
-	:return: 
+	:return:
 		pp_ranks: ranks of each pipeline parallel group
 		dp_ranks: ranks of each data parallel group
-		tp_ranks: ranks of each ensor parallel group
+		tp_ranks: ranks of each tensor parallel group
 	"""
 	args.world_size = sum(args.gpus)
 	args.pipeline_group_size = len(args.gpus)	# pipeline group size
@@ -136,30 +213,32 @@ def rank_topology(args):
 		for i in range(num_tp_grps):
 			ranks = range(i*args.tensor_group_size, (i+1)*args.tensor_group_size)
 			tpg_ranks.append(list(ranks))
-		
+
 		logger.info(
 			f"pipeline groups: {ppg_ranks}\n"
 			f"data groups: {dpg_ranks}\n"
 			f"tensor groups: {tpg_ranks}"
 	      )
 	elif args.mode.lower() == "cs":
-		raise NotImplementedError(f"CS mode not support yet...")
-	
+		raise NotImplementedError(f"CS mode not support YET...")
+
 	return ppg_ranks, dpg_ranks, tpg_ranks
 
 
-def init_main_pg(backend, rank, world_size, dist_url, grp_name):
+def _init_main_pg(backend, rank, world_size, dist_url, grp_name):
 	"""
 	main pg建群, pp grp和dp grp负责实际工作
 	"""
+	grp_name = f"{grp_name}_mainPG_{world_size}:{rank}"
+	logger.info(f"Global rank[{rank}] start building MAIN PG: [{grp_name}]...")
+
 	if dist.is_initialized():
 		logger.info("MAIN PG with same name exists. Now destroy and rebuild it")
 		dist.destroy_process_group()	# destroy main group & subgroup
 	#
-	grp_name = f"{grp_name}_mainPG_{world_size}:{rank}"
-	logger.info(f"Global rank[{rank}] start building MAIN PG: [{grp_name}]...")
+
 	dist.init_process_group(
-		backend=backend, 							# 
+		backend=backend, 							#
 		timeout=datetime.timedelta(seconds=2*60), 	# 2 min
 		init_method=dist_url, 						# tcp init
 		world_size=world_size,
@@ -167,7 +246,7 @@ def init_main_pg(backend, rank, world_size, dist_url, grp_name):
 		group_name=grp_name
 	)
 
-def init_pipeline_parallel_group(backend, ppg_ranks, global_rank):
+def _init_pipeline_parallel_group(backend, ppg_ranks, global_rank):
 	"""
 	pipeline PG建群
 
@@ -175,19 +254,19 @@ def init_pipeline_parallel_group(backend, ppg_ranks, global_rank):
 	"""
 	global _PIPELINE_PARALLEL_RANKS
 	global _PIPELINE_PARALLEL_GROUP
-	assert dist.is_initialized()	# main group 
+	assert dist.is_initialized()	# main group
 	for ranks in ppg_ranks:
 		pg = dist.new_group(
 			ranks=ranks,
-			timeout=datetime.timedelta(seconds=2*60), 	# 
+			timeout=datetime.timedelta(seconds=2*60), 	#
 			backend=backend
 		)
 		if global_rank in ranks:
-			_PIPELINE_PARALLEL_RANKS = ranks
+			_PIPELINE_PARALLEL_RANKS = sorted(ranks)	#
 			_PIPELINE_PARALLEL_GROUP = pg
 
-def init_data_parallel_group(backend, dpg_ranks, global_rank):
+def _init_data_parallel_group(backend, dpg_ranks, global_rank):
 	raise NotImplementedError()
 
-def init_tensor_parallel_group(backend, tpg_ranks, global_rank):
+def _init_tensor_parallel_group(backend, tpg_ranks, global_rank):
 	raise NotImplementedError()
