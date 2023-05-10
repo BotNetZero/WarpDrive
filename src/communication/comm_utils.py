@@ -4,12 +4,12 @@ Author        : Di Niu
 CreatedDate   : 2023/05/05
 Description   :
 """
-from datetime import datetime
+import datetime
 import torch
 import torch.cuda as cuda
 import torch.distributed as dist
 from src.common.logger import logger
-from communication.communicator import Communicator
+from src.communication.communicator import Communicator
 
 
 _MAIN_GROUP_COMM = None
@@ -95,6 +95,9 @@ def init_distributed_env(args):
 	if args.local_rank >= args.data_group_size:
 		raise ValueError(f"local rank [{args.local_rank}] is larger than data_group_size [{args.data_group_size}]")
 
+	# ranks of each group
+	ppg_ranks, dpg_ranks, tpg_ranks = rank_topology(args)
+
 	# init main PG
 	_init_main_pg(args.pp_backend, args.global_rank, args.world_size, args.dist_url, args.group_name)
 	cuda.set_device(args.cuda_id)	# cuda_id --> global_rank
@@ -106,9 +109,6 @@ def init_distributed_env(args):
 	global _PIPELINE_PARALLEL_WORLD_SIZE
 	global _DATA_PARALLEL_WORLD_SIZE
 	global _TENSOR_PARALLEL_WORLD_SIZE
-
-	# ranks of each group
-	ppg_ranks, dpg_ranks, tpg_ranks = rank_topology(args)
 
 	_PIPELINE_PARALLEL_WORLD_SIZE = args.pipeline_group_size
 	_init_pipeline_parallel_group(args.pp_backend, ppg_ranks, args.global_rank)

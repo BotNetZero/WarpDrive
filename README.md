@@ -17,7 +17,7 @@ a LLM training engine under CS(Client-Server) environment
 8. :building_construction: llm training
 	- :building_construction: pretrain
 	- :stop_sign: RLHF
-	- :stop_sign: AIHF
+	- :stop_sign: RLAI
 9. :stop_sign: llm evaluation
 
 

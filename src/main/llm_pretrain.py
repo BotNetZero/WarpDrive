@@ -7,15 +7,6 @@ Description   : pretrain
 import os, sys
 sys.path.append(os.getcwd())
 
-# -*- coding: utf-8 -*-
-"""
-Author        : Di Niu
-CreatedDate   : 2023/05/09
-Description   :
-"""
-import os, sys
-sys.path.append(os.getcwd())
-
 import torch
 import torch.cuda as cuda
 import torch.distributed as dist
@@ -34,30 +25,7 @@ def pretrain():
 	send_stream = cuda.Stream(device)					# stream for p2p send
 	recv_stream = cuda.Stream(device)					# stream for p2p recv
 
-	pp_grp = get_pp_group()
-	for i in range(10):
-		print(f"<<<<< iteration {i} in rank {args.global_rank} >>>>")
-		with cuda.stream(compute_stream):
-			send_tensor = torch.empty(2,2, device=device) + args.global_rank + i
-			recv_tensor = torch.empty(2,2, device=device)
-		send_stream.wait_stream(compute_stream)
-		print("synchronize with compute stream")
-		if args.global_rank == 0:
-			next_rank = get_pp_next_global_rank()
-			print("communicate with rank:", next_rank)
-			comm.send(send_stream, send_tensor, next_rank, pp_grp)
-			comm.recv(recv_stream, recv_tensor, next_rank, pp_grp)
-		elif args.global_rank == 1:
-			next_rank = get_pp_prev_global_rank()
-			print("communicate with rank:", next_rank)
-			comm.send(send_stream, send_tensor, next_rank, pp_grp)
-			comm.recv(recv_stream, recv_tensor, next_rank, pp_grp)
-		print("send tensor:", send_tensor)
-		print("recv tensor:", recv_tensor)
-		print()
-
-	destroy_distributed_env()
-	print("destroy distributed environment...")
+	
 
 if __name__ == "__main__":
 	pretrain()

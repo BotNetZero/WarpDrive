@@ -14,6 +14,10 @@ echo "local rank: ${local_rank}"
 cuda_id=$5;
 echo "cuda index: ${cuda_id}"
 
+script=$6
+echo "test script: ${script}"
+
+
 args="--group_name usr \
 --mode cluster \
 --pp_backend nccl \
@@ -31,8 +35,7 @@ args="--group_name usr \
 
 echo "args: "${args}
 
-echo "Pretrain Pythia7B"
-docker run -it --rm -p 4001:4001 -v /home/docker/warpdrive:/workspace --runtime=nvidia --gpus all --name warpdrive diniu/assistant_base:v1 bash scripts/run_warpdrive.sh "${args}"
+docker run -it --rm -p 4001:4001 -v /home/docker/warpdrive:/workspace --runtime=nvidia --gpus all --name warpdrive diniu/assistant_base:v1 bash python3 -m src.test.${script} "${args}"
 
 
 
