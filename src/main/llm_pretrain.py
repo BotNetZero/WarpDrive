@@ -6,26 +6,39 @@ Description   : pretrain
 """
 import os, sys
 sys.path.append(os.getcwd())
-
+import traceback
 import torch
 import torch.cuda as cuda
 import torch.distributed as dist
 from src.utils.arguments import parse_args
-from src.communication.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
-from src.communication.comm_utils import get_pp_prev_global_rank, get_pp_next_global_rank
+from src.distributed.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
+from src.distributed.comm_utils import get_pp_prev_global_rank, get_pp_next_global_rank
+
+
+def get_model():
+	pass
 
 
 def pretrain():
+	"""
+
+	"""
 	args = parse_args()
 	init_distributed_env(args)
 	comm = get_main_group_comm()
 	device = torch.device(args.cuda_id)
-	#
-	compute_stream = cuda.default_stream(device)		# stream for computing
-	send_stream = cuda.Stream(device)					# stream for p2p send
-	recv_stream = cuda.Stream(device)					# stream for p2p recv
 
-	
+	# model, optimizer, dataloader
+
+
+	# traing & eval
+
 
 if __name__ == "__main__":
-	pretrain()
+	try:
+		pretrain()
+	except Exception as exc:
+		print(traceback.print_exc(exc))
+	#
+	destroy_distributed_env()
+	

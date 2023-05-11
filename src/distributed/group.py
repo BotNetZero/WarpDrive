@@ -14,3 +14,4 @@ class Group:
 		self.grp_type = grp_type
 		self.pg = None
 
+	

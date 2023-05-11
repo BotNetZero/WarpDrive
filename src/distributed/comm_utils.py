@@ -7,9 +7,9 @@ Description   :
 import datetime
 import torch
 import torch.cuda as cuda
-import torch.distributed as dist
+import src.distributed.c10d as dist
 from src.common.logger import logger
-from src.communication.communicator import Communicator
+from src.distributed.communicator import Communicator
 
 
 _MAIN_GROUP_COMM = None
@@ -123,7 +123,7 @@ def init_distributed_env(args):
 
 
 
-def destroy_distributed_env(main_group_name=None):
+def destroy_distributed_env(group=None):
 	"""
 
 	"""
@@ -193,9 +193,9 @@ def rank_topology(args):
 				f"world_size [{args.world_size}] is not divisible by tensor_group_size "
 				f"[{args.tensor_group_size}] x pipeline_group_size [{args.pipeline_group_size}])"
       		)
-		if args.world_size != (args.tensor_group_size * args.pipeline_group_size*args.data_group_size ):
+		if args.world_size != (args.tensor_group_size*args.pipeline_group_size*args.data_group_size):
 			raise RuntimeError(
-				f"world_size [{args.world_size}] != "
+				f"world_size [{args.world_size}] != tensor_group_size [{args.tensor_group_size}] * pipeline_group_size [{args.pipeline_group_siz}] * data_group_size [{args.data_group_size}]"
 			)
 		num_pp_grps = args.world_size // args.pipeline_group_size		# number of pipeline parallel groups
 		num_tp_grps = args.world_size // args.tensor_group_size 		# number of tensor parallel groups
@@ -234,7 +234,7 @@ def _init_main_pg(backend, rank, world_size, dist_url, grp_name):
 
 	if dist.is_initialized():
 		logger.info("MAIN PG with same name exists. Now destroy and rebuild it")
-		dist.destroy_process_group()	# destroy main group & subgroup
+		destroy_distributed_env()	# destroy main group & subgroup
 	#
 
 	dist.init_process_group(
