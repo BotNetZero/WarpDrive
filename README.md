@@ -1,5 +1,5 @@
 # WarpDrive
-a LLM training engine under CS(Client-Server) environment
+a LLM training engine under cluster, CS(Client-Server) environment
 
 ## tasks:
 1. :building_construction: topology:
@@ -11,21 +11,31 @@ a LLM training engine under CS(Client-Server) environment
 	- :white_check_mark: P2P comm
 3. :building_construction: pipeline parallel 
 	- :building_construction: sequence pipeline schedule
-4. :stop_sign: data parallel
-5. :stop_sign: tensor parallel
-6. :stop_sign: sequence parallel
-7. :building_construction: training data (open source)
+4. :building_construction: activation recomputation
+	- :building_construction: full mode
+	- :stop_sign: selective mode
+5. :stop_sign: data parallel
+6. :stop_sign: tensor parallel
+7. :stop_sign: sequence parallel
+8. :building_construction: training data (open source)
 	- :white_check_mark: OIG
 	- :stop_sign: pile
-8. :building_construction: llm training
+9. :building_construction: models
+	- :building_construction: Pythia7B
+	- :stop_sign: parallel models
+10. :building_construction: llm training
 	- :building_construction: pretrain
 	- :stop_sign: RLHF
 	- :stop_sign: RLAI
-9. :stop_sign: llm evaluation
+11. :stop_sign: llm evaluation
+12. :building_construction: mixed precision
+	- :white_check_mark: empty model init, device map, partial loading
+	- :white_check_mark: fp16
+	- :stop_sign: int8
 
 
 ## GPUs topology
-cluster环境下的均配结构: world_size = pp_size_ * dp_size * tp_size
+cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size
 ![avatar](./docs/imgs/3D.jpg)
 
 ```xml
@@ -65,11 +75,31 @@ dpg: [(1,2,3), (4,5,6)]
 - gather
 - reduce
 
+通信模式解释
+![avatar](./docs/imgs/collective comm.jpg)
+
+
 3. schedule
 - pipeline schedule: 
 	- sequence 
 	- 1f1b w/o interleave
 	- 1f1b with interleave
 
+4. Mixed precision
+- fp32
+- fp16, bf16
+- fp8 (nvidia transformer engine) with Hopper GPU architectur
+
 ## training data
 Open source training data
+
+
+## models
+1. GPTNeoX
+- Pythia7B
+
+
+## todo
+1. memory access
+2. matrix swap
+3. sparse transformer

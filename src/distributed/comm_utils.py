@@ -16,7 +16,9 @@ _MAIN_GROUP_COMM = None
 
 _PIPELINE_PARALLEL_GROUP = None
 _PIPELINE_PARALLEL_RANKS = None
+_PIPELINE_PARALLEL_GROUP_RANK = None
 _PIPELINE_PARALLEL_WORLD_SIZE = None
+
 
 _DATA_PARALLEL_GROUP = None
 _DATA_PARALLEL_RANKS = None
@@ -32,17 +34,30 @@ def get_main_group_comm():
 	return _MAIN_GROUP_COMM
 
 def get_pp_group():
+	"""
+	当前的pipe group
+	"""
 	assert _PIPELINE_PARALLEL_GROUP is not None
 	return _PIPELINE_PARALLEL_GROUP
 
 def get_pp_ranks():
 	"""
-	global ranks
+	当前pipe group包含的global ranks
 	"""
 	assert _PIPELINE_PARALLEL_RANKS is not None
 	return _PIPELINE_PARALLEL_RANKS
 
+def get_pp_group_rank():
+	"""
+	当前rank所处pipe的group rank
+	"""
+	assert _PIPELINE_PARALLEL_GROUP_RANK is not None
+	return _PIPELINE_PARALLEL_GROUP_RANK
+
 def get_pp_world_size():
+	"""
+	当前pipe group的size
+	"""
 	assert _PIPELINE_PARALLEL_WORLD_SIZE is not None
 	return _PIPELINE_PARALLEL_WORLD_SIZE
 
@@ -253,6 +268,7 @@ def _init_pipeline_parallel_group(backend, ppg_ranks, global_rank):
 	:param backend:
 	"""
 	global _PIPELINE_PARALLEL_RANKS
+	global _PIPELINE_PARALLEL_GROUP_RANK
 	global _PIPELINE_PARALLEL_GROUP
 	assert dist.is_initialized()	# main group
 	for ranks in ppg_ranks:
@@ -263,6 +279,7 @@ def _init_pipeline_parallel_group(backend, ppg_ranks, global_rank):
 		)
 		if global_rank in ranks:
 			_PIPELINE_PARALLEL_RANKS = sorted(ranks)	#
+			_PIPELINE_PARALLEL_GROUP_RANK = ranks.index(global_rank)
 			_PIPELINE_PARALLEL_GROUP = pg
 
 def _init_data_parallel_group(backend, dpg_ranks, global_rank):

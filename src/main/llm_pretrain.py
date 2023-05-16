@@ -29,7 +29,7 @@ def pretrain():
 	device = torch.device(args.cuda_id)
 
 	# model, optimizer, dataloader
-
+	get_model()
 
 	# traing & eval
 
@@ -41,4 +41,3 @@ if __name__ == "__main__":
 		print(traceback.print_exc(exc))
 	#
 	destroy_distributed_env()
-	
