@@ -38,5 +38,5 @@ docker run -it --rm -p 4001:4001 -v /home/docker/warpdrive:/workspace --runtime=
 
 echo "over...."
 
-# docker run -it --rm -p 4001:4001 -v /home/docker/warpdrive:/workspace -v /home/docker/models/Pythia-Chat-Base-7B:/workspace/models/Pythia-Chat-Base-7B --runtime=nvidia --gpus all --name assistant diniu/assistant_base:v1 bash
+# docker run -it --rm -p 4001:4001 -v /home/docker/warpdrive:/workspace -v /home/docker/models/pythia_7b:/workspace/saved_models/pythia_7b --runtime=nvidia --gpus all --name assistant diniu/assistant_base:v1 bash
 # python3 -m bot --model /workspace/models/Pythia-Chat-Base-7B -g 0:10 -r 10

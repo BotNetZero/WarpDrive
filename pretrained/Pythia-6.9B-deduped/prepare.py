@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
 	if not os.path.exists(args.save_dir):
 		os.mkdir(args.save_dir)
-	save_path = os.path.join(args.save_dir, args.model_name.replace('/', '_'))
+	save_path = os.path.join(args.save_dir, "pythia_7b")
 	if not os.path.exists(save_path):
 		os.mkdir(save_path)
 

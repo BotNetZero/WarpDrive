@@ -18,7 +18,7 @@ from src.distributed.comm_utils import init_distributed_env, destroy_distributed
 from src.distributed.comm_utils import get_pp_prev_global_rank, get_pp_next_global_rank
 
 def main():
-	args = parse_args()
+	args, _ = parse_args()
 	init_distributed_env(args)
 	comm = get_main_group_comm()
 	device = torch.device(args.cuda_id)
@@ -28,8 +28,6 @@ def main():
 	send_stream = cuda.Stream(device)					# stream for p2p send
 	recv_stream = cuda.Stream(device)					# stream for p2p recv
 
-	device = torch.device(0)
-	print(device)
 	cuda.set_device(device)
 	compute_stream = cuda.default_stream(device)		# stream for computing
 	send_stream = cuda.Stream(device)					# stream for p2p send

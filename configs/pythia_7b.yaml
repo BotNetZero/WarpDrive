@@ -1,24 +1,22 @@
 {
-   "pipe_parallel_size": 1,
-   "model_parallel_size": 2,
-
-   "num_layers": 32,
+   "model_type": "gpt_neox",
+   "total_num_layers": 32,
    "hidden_size": 4096,
+   "intermediate_size": 16384,    # 4*hidden_size
    "num_attention_heads": 32,
    "seq_length": 2048,
+   "vocab_size": 50432,
    "max_position_embeddings": 2048,
-   "norm": "layernorm",
-   "pos_emb": "rotary",
    "rotary_pct": 0.25,
+   "rotary_emb_base": 10000,
    "no_weight_tying": true,
    "gpt_j_residual": true,
    "output_layer_parallelism": "column",
 
-   "attention_config": [[["flash"], 32]]
+   "attention_config": [[["flash"], 32]],
 
    "scaled_upper_triang_masked_softmax_fusion": true,
    "bias_gelu_fusion": true,
-
 
    "optimizer": {
      "type": "Adam",
@@ -54,8 +52,11 @@
    "gradient_clipping": 1.0,
    "weight_decay": 0.1,
    "hidden_dropout": 0,
+   "hidden_act": "gelu",
    "attention_dropout": 0,
+   "layer_norm_eps": 1e-05,
 
+   "torch_dtype": "fp16",
    "fp16": {
      "fp16": true,
      "enabled": true,

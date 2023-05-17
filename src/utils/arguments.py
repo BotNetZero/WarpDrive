@@ -4,7 +4,10 @@ Author        : Di Niu
 CreatedDate   : 2023/05/06
 Description   :
 """
+import os
 import argparse
+from src.common.constants import CONFIG_PATH
+from src.utils.file import read_yaml_file
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='Warp Drive training engine')
@@ -13,7 +16,15 @@ def parse_args():
 
 	args = parser.parse_args()
 
-	return args
+	# load model configs
+	if args.model_name.lower() == "pythia_7b":
+		config_file = os.path.join(CONFIG_PATH, "pythia_7b.yaml")
+		configs = read_yaml_file(config_file)
+	else:
+		raise NotImplementedError(f"LLM {args.model_name} not support YET!!!")
+
+
+	return args, configs
 
 def _add_distributed_arguments(parser):
 	parser.add_argument("--group_name", type=str, default="user",
@@ -45,6 +56,8 @@ def _add_distributed_arguments(parser):
 
 
 def _model_arguments(parser):
+	parser.add_argument('--model_name', type=str, default='pythia_7b', metavar='S',
+						help='model name in lowercase (default: pythia_7b)')
 	parser.add_argument("--training_mode", type=str, default="pretrain", choices=["train", "pretrain"],
 						help="training mode: train from scratch, retrain (default: pretrain)")
 	parser.add_argument("--precision", type=str, default="fp16", choices=["fp32", "fp16", "bf16", "int8"],
@@ -53,9 +66,8 @@ def _model_arguments(parser):
                        help='Static loss scaling, positive power of 2 '
                        'values can improve fp16 convergence. If None, dynamic'
                        'loss scaling is used.')
-	parser.add_argument('--model_name', type=str, default='gptneox', metavar='S',
-						help='model name in lowercase (default: gptneox)')
-
+	parser.add_argument("--num_layers", type=int,
+		     			help="number of model layers at current stage")
 
 # def _add_mixed_precision_args(parser):
 #     group = parser.add_argument_group(title='mixed precision')

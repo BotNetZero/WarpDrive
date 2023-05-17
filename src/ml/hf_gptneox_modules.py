@@ -6,11 +6,8 @@ Description   : copy from openchatkit and revise
 """
 import os
 import torch
-import math
-import numpy as np
-from torch import nn
+import torch.nn as nn
 import torch.cuda as cuda
-from torch.nn import functional
 from torch.utils.checkpoint import checkpoint
 
 from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXAttention as _GPTNeoXAttention
@@ -167,7 +164,7 @@ class GPTEmbeddings(nn.Module):
 		self.embed_in = nn.Embedding(config.vocab_size, self.embed_dim, device="meta")
 
 	@classmethod
-	def from_pretrained(cls, model_path, config=None, device=None):
+	def from_pretrained(cls, model_path, config=None):
 		if config is None:
 			config = GPTConfig.from_pretrained(model_path)
 		module = cls(config).eval()
@@ -175,12 +172,6 @@ class GPTEmbeddings(nn.Module):
 			module.load_state_dict(torch.load(os.path.join(
 				model_path, 'pytorch_embs.pt',
 			)))
-			if device is None:
-				if cuda.is_available():
-					device = cuda.current_device()
-				else:
-					device = "cpu"
-			module.to(device)
 		except:
 			print(f'Cannot load from <model_path>. The model is randomly initialized.')
 		return module
@@ -198,7 +189,7 @@ class GPTBlock(_GPTNeoXBlock):
 	def __init__(self, config, *args, use_checkpoint=True, **kargs):
 		super(_GPTNeoXBlock, self).__init__()
 		self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-		self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device="meta")
+		self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 		self.attention = GPTNeoXAttention(config)
 		self.mlp = GPTNeoXMLP(config)
 		self.config = config
@@ -258,7 +249,7 @@ class GPTBlock(_GPTNeoXBlock):
 				x.requires_grad_(True)
 				x = checkpoint(self.block_forward, x, attention_mask, None)
 			else:
-				x = self.block_forward(x, prefix_masks=prefix_masks)
+				x = self.block_forward(x, prefix_masks=kargs["prefix_masks"])
 
 			return x
 
@@ -281,7 +272,7 @@ class GPTBlock(_GPTNeoXBlock):
 class GPTLMHead(nn.Module):
 	def __init__(self, config):
 		super().__init__()
-		self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+		self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device="meta")
 		self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device="meta")
 
 	@classmethod
@@ -293,12 +284,6 @@ class GPTLMHead(nn.Module):
 			module.load_state_dict(torch.load(os.path.join(
 				model_path, 'pytorch_lm_head.pt',
 			)))
-			if device is None:
-				if cuda.is_available():
-					device = cuda.current_device()
-				else:
-					device = "cpu"
-			module.to(device)
 		except:
 			print('Cannot load from <model_name>. The model is randomly initialized.')
 		return module

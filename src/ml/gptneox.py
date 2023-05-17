@@ -4,31 +4,34 @@ Author        : Di Niu
 CreatedDate   : 2023/05/10
 Description   : copy from openchatkit and revise
 """
+import os
 from copy import deepcopy
 import torch
 import torch.nn as nn
+from src.common.constants import MODEL_PATH
 from src.distributed.comm_utils import get_pp_group_rank
 
 
 class GPTStageBase(nn.Module):
 	def __init__(self, args, config):
 		super(GPTStageBase, self).__init__()
-		self._embedding_dim = args.embedding_dim  # embedding dimension
-		self._seq_length = args.seq_length
+		# self._embedding_dim = args.embedding_dim  # embedding dimension
+		# self._seq_length = args.seq_length
 		# the dimension of the feedforward aws_network model in nn.TransformerEncoder
-		self._feedforward_dim = args.embedding_dim * 4
-		self._num_heads = args.num_heads  # the number of heads in the multi-head attention models
+		# self._feedforward_dim = args.embedding_dim * 4
+		# self._num_heads = args.num_heads  # the number of heads in the multi-head attention models
 		self._num_layers = args.num_layers
 		self._layer_begin = get_pp_group_rank() * args.num_layers
-		self._layer_end = min(self._layer_begin + args.num_layers, args.max_layers)
+		self._layer_end = min(self._layer_begin + args.num_layers, config.total_num_layers)
 
 		self._task_type = getattr(args, 'task_type', 'language_model')
 
 		self.load_pretrained_model = args.training_mode == "pretrain"
 		self.model_name = args.model_name.lower()
 		self.config = config
+		self.model_path = os.path.join(MODEL_PATH, self.model_name)
 
-		if self.model_name == "gptneox":
+		if self.model_name == "pythia_7b":
 			from src.ml.hf_gptneox_modules import GPTEmbeddings, GPTBlock, GPTLMHead
 		else:
 			raise NotImplementedError(f"{self.model_name} not support YET!!!")
@@ -37,19 +40,21 @@ class GPTStageBase(nn.Module):
 		self._GPTBlock = GPTBlock
 		self._GPTLMHead = GPTLMHead
 
-	def _create_first_layer(self, device):
+	def _create_first_layer(self):
 		layer = self._GPTEmbeddings(deepcopy(self.config))
 		if self.load_pretrained_model:
+			print("load embedding")
 			layer.load_state_dict(
-				torch.load(f'{self.model_name}/pytorch_embs.pt')
+				torch.load(f'{self.model_path}/pytorch_embs.pt')
 			)
 		return layer
 
 	def _create_last_layer(self):
 		layer = self._GPTLMHead(deepcopy(self.config))
 		if self.load_pretrained_model:
+			print("load lm head")
 			layer.load_state_dict(
-				torch.load(f'{self.model_name}/pytorch_lm_head.pt')
+				torch.load(f'{self.model_path}/pytorch_lm_head.pt')
 			)
 		return layer
 
@@ -59,7 +64,7 @@ class GPTStageBase(nn.Module):
 		if self.load_pretrained_model:
 			print(f'loading layer {layer_idx}')
 			layer.load_state_dict(
-				torch.load(f'{self.model_name}/pytorch_{layer_idx}.pt')
+				torch.load(f'{self.model_path}/pytorch_{layer_idx}.pt')
 			)
 		return layer
 
@@ -128,10 +133,8 @@ class GPTStageLast(GPTStageBase):
 
 		self.model = nn.Sequential(*module_list).to(device)
 
-
 	def forward(self, x, **kargs):
 		for module in self.model:
 			x = module(x, **kargs)
 
 		return x
-
