@@ -10,6 +10,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm
 3. :building_construction: pipeline parallel 
+	- :white_check_mark: staged model
 	- :building_construction: sequence pipeline schedule
 4. :building_construction: activation recomputation
 	- :building_construction: full mode
@@ -21,7 +22,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: OIG
 	- :stop_sign: pile
 9. :building_construction: models
-	- :building_construction: Pythia7B
+	- :white_check_mark: Pythia7B
 	- :stop_sign: parallel models
 10. :building_construction: llm training
 	- :building_construction: pretrain

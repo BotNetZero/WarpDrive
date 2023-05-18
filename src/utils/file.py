@@ -18,10 +18,12 @@ def read_yaml_file(fname):
 	contents = Namespace(**contents)
 	return contents
 
+
 def write_yaml_file(fname, data):
 	fname = ensure_path(fname)
 	with fname.open("w", encoding="utf-8") as fid:
 		yaml.dump(data, fid)
+
 
 def ensure_path(path):
 	"""Ensure string is converted to a Path.
@@ -33,3 +35,5 @@ def ensure_path(path):
 		return Path(path)
 	else:
 		return path
+
+

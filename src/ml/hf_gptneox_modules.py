@@ -161,7 +161,7 @@ class GPTEmbeddings(nn.Module):
 
 		self.config = config
 		self.embed_dim = config.hidden_size
-		self.embed_in = nn.Embedding(config.vocab_size, self.embed_dim, device="meta")
+		self.embed_in = nn.Embedding(config.vocab_size, self.embed_dim)
 
 	@classmethod
 	def from_pretrained(cls, model_path, config=None):
@@ -272,8 +272,8 @@ class GPTBlock(_GPTNeoXBlock):
 class GPTLMHead(nn.Module):
 	def __init__(self, config):
 		super().__init__()
-		self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device="meta")
-		self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device="meta")
+		self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+		self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
 	@classmethod
 	def from_pretrained(cls, model_path, config=None):

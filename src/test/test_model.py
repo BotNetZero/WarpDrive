@@ -6,7 +6,7 @@ Description   :
 """
 import os, sys
 sys.path.append(os.getcwd())
-
+import time
 import traceback
 import torch
 import torch.cuda as cuda
@@ -35,6 +35,7 @@ def main():
 	except Exception as exc:
 		print(traceback.format_exc())
 
+	time.sleep(5*60)
 	destroy_distributed_env()
 	print("destroy distributed environment...")
 
