@@ -1,17 +1,26 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Author        : Di Niu
-CreatedDate   : 2023/05/10
-Description   : group structure
-"""
 
+from typing import Optional
+
+from torch.distributed import Backend
+from torch._C._distributed_c10d import ProcessGroup, PrefixStore
 
 class Group:
-	def __init__(self, grp_name, grp_type="main") -> None:
+	def __init__(
+			self,
+			name: str,
+			pg: ProcessGroup,
+			backend: Backend,
+			store: PrefixStore,
+			config: str,
+			level: int = 0,
+		):
 		"""
 		"""
-		self.grp_name = grp_name
-		self.grp_type = grp_type
-		self.pg = None
-
-	
+		self.name = name
+		self.pg = pg
+		self.backend = backend
+		self.store = store
+		self.config = config
+		self.level = level
