@@ -77,7 +77,7 @@ dpg: [(1,2,3), (4,5,6)]
 - reduce
 
 通信模式解释
-![avatar](./docs/imgs/collective comm.jpg)
+![avatar](./docs/imgs/collective_comm.jpg)
 
 
 3. schedule
