@@ -14,10 +14,12 @@ import src.distributed.c10d as dist
 from src.utils.arguments import parse_args
 from src.distributed.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
 from src.ml.gptneox import GPTStageFirst, GPTStageMiddle, GPTStageLast
-
+from src.ml.tokenizer import Tokenizer
+from src.common.constants import MODEL_PATH
 
 def main():
 	args, configs = parse_args()
+	model_path = os.path.join(MODEL_PATH, args.model_name.lower())
 	#
 	try:
 		init_distributed_env(args)
@@ -27,7 +29,9 @@ def main():
 		assert args.world_size == 2
 
 		if args.global_rank == 0:
+			tokenizer = Tokenizer(model_path)
 			model = GPTStageFirst(args, configs, device)
+
 
 		if args.global_rank == 1:
 			model = GPTStageLast(args, configs, device)

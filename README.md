@@ -20,7 +20,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 7. :stop_sign: sequence parallel
 8. :building_construction: training data (open source)
 	- :white_check_mark: OIG
-	- :stop_sign: pile
+	- :building_construction: streaming style dataset
 9. :building_construction: models
 	- :white_check_mark: Pythia7B
 	- :stop_sign: parallel models
@@ -29,7 +29,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 	- :stop_sign: RLHF
 	- :stop_sign: RLAI
 11. :stop_sign: llm evaluation
-12. :building_construction: mixed precision
+12. :building_construction: model compression
 	- :white_check_mark: empty model init, device map, partial loading
 	- :white_check_mark: fp16
 	- :stop_sign: int8
@@ -93,6 +93,7 @@ dpg: [(1,2,3), (4,5,6)]
 
 ## training data
 Open source training data
+- OIG: https://huggingface.co/datasets/laion/OIG
 
 
 ## models
