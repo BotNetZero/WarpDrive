@@ -12,10 +12,10 @@ class GroupManager:
     def __init__(self) -> None:
         self.size = 0
         self.table = {}
-        self.pg_map = {}
-        self.pg_names = {}
-        self.pg_backend_config = {}
-        self.pg_group_ranks = {}
+        # self.pg_map = {}
+        # self.pg_names = {}
+        # self.pg_backend_config = {}
+        # self.pg_group_ranks = {}
     
     def add_group(self, group: Group):
         """
@@ -32,10 +32,10 @@ class GroupManager:
         self.size += 1
         self.table[group.name] = group
         # 统计数据
-        self.pg_map[group.pg] = (group.backend, group.store)
-        self.pg_names[group.pg] = group.name
-        self.pg_backend_config[group.pg] = group.config
-        self.pg_group_ranks[group.pg] = {i: i for i in range(group.pg.size())}
+        # self.pg_map[group.pg] = (group.backend, group.store)
+        # self.pg_names[group.pg] = group.name
+        # self.pg_backend_config[group.pg] = group.config
+        # self.pg_group_ranks[group.pg] = {i: i for i in range(group.pg.size())}
     
     def exist_group(self, group: Union[str, Group]):
         if isinstance(group, str):
@@ -62,10 +62,13 @@ class GroupManager:
         if not self.exist_group(group):
             return
         # 清理统计数据
-        del self.pg_map[group.pg]
-        del self.pg_names[group.pg]
-        del self.pg_backend_config[group.pg]
-        del self.pg_group_ranks[group.pg]
+        # del self.pg_map[group.pg]
+        # del self.pg_names[group.pg]
+        # del self.pg_backend_config[group.pg]
+        # del self.pg_group_ranks[group.pg]
         # 清理全局数据
         del self.table[group.name]
         self.size -= 1
+
+
+_group_manager = GroupManager()
