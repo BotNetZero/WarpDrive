@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from typing import Optional
+from torch.distributed import Backend
+from torch._C._distributed_c10d import PrefixStore, ProcessGroup
 
-from torch.distributed import Backend, default_pg_timeout
-from torch._C._distributed_c10d import (
-    Store, PrefixStore, ProcessGroup, DebugLevel, get_debug_level
-)
-
-from .constants import (
-    _NCCL_AVAILABLE, _GLOO_AVAILABLE,
-    ProcessGroupNCCL, ProcessGroupGloo, _ProcessGroupWrapper
-)
 
 class Group:
 	def __init__(

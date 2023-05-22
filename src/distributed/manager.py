@@ -3,7 +3,7 @@
 
 from typing import Union
 
-from group import Group
+from .group import Group
 
 # 管理所有 group
 # TODO 增删改查的时候需要加锁
@@ -51,9 +51,11 @@ class GroupManager:
             if self.exist_group(group):
                 group = self.table[group]
                 self._del_group(group)
+            return
         if isinstance(group, Group):
             if self.exist_group(group):
                 self._del_group(group)
+            return
         raise Exception("group instance type error")
     
     def _del_group(self, group: Group):

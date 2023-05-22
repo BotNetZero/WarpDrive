@@ -11,10 +11,22 @@ from torch._C._distributed_c10d import (
     Store, PrefixStore, ProcessGroup, DebugLevel, get_debug_level
 )
 
-from .constants import (
-    _NCCL_AVAILABLE, _GLOO_AVAILABLE,
-    ProcessGroupNCCL, ProcessGroupGloo, _ProcessGroupWrapper
-)
+NCCL_AVAILABLE = True
+GLOO_AVAILABLE = True
+
+try:
+    from torch._C._distributed_c10d import ProcessGroupNCCL
+    ProcessGroupNCCL.__module__ = "torch.distributed.distributed_c10d"
+except ImportError:
+    NCCL_AVAILABLE = False
+
+try:
+    from torch._C._distributed_c10d import ProcessGroupGloo
+    from torch._C._distributed_c10d import _ProcessGroupWrapper
+    ProcessGroupGloo.__module__ = "torch.distributed.distributed_c10d"
+except ImportError:
+    GLOO_AVAILABLE = False
+
 from .group import Group
 from .manager import _group_manager
 
@@ -26,7 +38,7 @@ PG_WRAPPER_STORE_PREFIX = "pg_wrapper"
 STORE_BASED_BARRIER_PREFIX = "store_based_barrier_key"
 
 
-def _new_process_group_helper(
+def new_process_group_helper(
     group_size,
     group_rank,
     backend,
@@ -71,7 +83,7 @@ def _new_process_group_helper(
             backend_class = ProcessGroupGloo(backend_prefix_store, group_rank, group_size, timeout=timeout)
             backend_type = ProcessGroup.BackendType.GLOO
         else:
-            if not _NCCL_AVAILABLE:
+            if not NCCL_AVAILABLE:
                 raise RuntimeError("Distributed package doesn't have NCCL " "built in")
             if pg_options is not None:
                 assert isinstance(
@@ -101,7 +113,7 @@ def _new_process_group_helper(
             # In debug mode and if GLOO is available, wrap in a wrapper PG that
             # enables enhanced collective checking for debuggability.
             if get_debug_level() == DebugLevel.DETAIL:
-                if not _GLOO_AVAILABLE:
+                if not GLOO_AVAILABLE:
                     logger.info(
                         """TORCH_DISTRIBUTED_DEBUG was set to DETAIL, but
                                 GLOO is not available. Build with Gloo to
@@ -152,7 +164,7 @@ def _create_process_group_wrapper(
     return wrapped_pg
 
 
-def _store_based_barrier(group: Group, timeout: timedelta):
+def store_based_barrier(group: Group, timeout: timedelta):
     """
     Barrier based on store which is used for synchronizing processes after
     ``init_process_group`` or ``new_group``. Intended to be used only with

@@ -31,8 +31,8 @@ from torch._C._distributed_c10d import (
 
 from .group import Group
 from .manager import _group_manager
-from .constants import _GLOO_AVAILABLE, _NCCL_AVAILABLE, _ProcessGroupWrapper
-from .helper import _new_process_group_helper, _store_based_barrier
+from .helper import new_process_group_helper, store_based_barrier, \
+    GLOO_AVAILABLE, NCCL_AVAILABLE, _ProcessGroupWrapper
 
 
 logger = logging.getLogger(__name__)
@@ -531,14 +531,14 @@ def _check_for_nccl_backend(group: Group):
     _check_group(group)
     pg: ProcessGroup = group.pg
     # Gate PG wrapper check on Gloo availability.
-    if _GLOO_AVAILABLE:
+    if GLOO_AVAILABLE:
         # It is not expected for PG to be wrapped many times, but support it just
         # in case
         while isinstance(pg, _ProcessGroupWrapper):
             pg = pg.wrapped_pg
 
     return (
-        _NCCL_AVAILABLE and
+        NCCL_AVAILABLE and
         pg.name() == Backend.NCCL
     )
 

@@ -1,24 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import time
 import logging
 from datetime import timedelta
 from typing import Union, Optional, Any
 
-import torch
-from torch.distributed import Backend, BackendConfig, rendezvous, default_pg_timeout
-from torch._C._distributed_c10d import (
-    Store, PrefixStore, ProcessGroup, DebugLevel, get_debug_level
-)
+from torch.distributed import Backend, rendezvous, default_pg_timeout
+from torch._C._distributed_c10d import Store, PrefixStore
 
 from .group import Group
 from .manager import _group_manager
-from .constants import (
-    _NCCL_AVAILABLE, _GLOO_AVAILABLE,
-    ProcessGroupNCCL, ProcessGroupGloo, _ProcessGroupWrapper
-)
-from .helper import _new_process_group_helper, _store_based_barrier
+from .helper import new_process_group_helper, store_based_barrier
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +71,13 @@ def new_process_group(
         # different systems (e.g. RPC) in case the store is multi-tenant.
         store = PrefixStore("default_pg", store)
 
-    group: Group = _new_process_group_helper(
+    group: Group = new_process_group_helper(
         world_size, rank, backend, store,
         pg_options=pg_options, group_name=group_name, timeout=timeout,
     )
 
     # exec barrier
     # TODO 支持其他 backend: MPI ...
-    _store_based_barrier(group, world_size, rank, timeout)
+    store_based_barrier(group, timeout)
 
     return group
