@@ -15,11 +15,16 @@ from src.accelerate.big_modeling import init_empty_weights, load_state_dict
 from src.utils.conversion import normalize_precision
 
 class GPTStageBase(nn.Module):
-	def __init__(self, args, config):
+	def __init__(self, args, config, **kwargs):
 		super(GPTStageBase, self).__init__()
 		self._num_layers = args.num_layers
-		self._layer_begin = get_pp_group_rank() * args.num_layers
-		self._layer_end = min(self._layer_begin + args.num_layers, config.total_num_layers)
+		full_mode = kwargs.get("full_mode", False)
+		if full_mode:
+			self._layer_begin = 0
+			self._layer_end = min(self._layer_begin + args.num_layers, config.total_num_layers)
+		else:
+			self._layer_begin = get_pp_group_rank() * args.num_layers
+			self._layer_end = min(self._layer_begin + args.num_layers, config.total_num_layers)
 
 		self._task_type = getattr(args, 'task_type', 'language_model')
 
@@ -46,9 +51,6 @@ class GPTStageBase(nn.Module):
 			print("load embedding")
 			checkpoint = torch.load(f'{self.model_path}/pytorch_embs.pt')
 			load_state_dict(layer, checkpoint, device, self.dtype)
-			print("embed_in device:", layer.embed_in.weight.device)
-			print("embed_in dtype:", layer.embed_in.weight.dtype)
-			print()
 			#
 			del checkpoint
 			gc.collect()
@@ -61,9 +63,6 @@ class GPTStageBase(nn.Module):
 			print("load lm head")
 			checkpoint = torch.load(f'{self.model_path}/pytorch_lm_head.pt')
 			load_state_dict(layer, checkpoint, device, self.dtype)
-			print("embed_out device:", layer.embed_out.weight.device)
-			print("embed_out dtype:", layer.embed_out.weight.dtype)
-			print()
 			#
 			del checkpoint
 			gc.collect()
@@ -76,9 +75,6 @@ class GPTStageBase(nn.Module):
 			print(f'loading layer {layer_idx}')
 			checkpoint = torch.load(f'{self.model_path}/pytorch_{layer_idx}.pt')
 			load_state_dict(layer, checkpoint, device, self.dtype)
-			print("mlp.dense_4h_to_h device:", layer.mlp.dense_4h_to_h.weight.device)
-			print("mlp.dense_4h_to_h dtype:", layer.mlp.dense_4h_to_h.weight.dtype)
-			print()
 			#
 			del checkpoint
 			gc.collect()
@@ -87,17 +83,8 @@ class GPTStageBase(nn.Module):
 
 class GPTStageFull(GPTStageBase):
 	def __init__(self, args, config, device):
-		super(GPTStageFull, self).__init__(args, config)
+		super(GPTStageFull, self).__init__(args, config, full_mode=True)
 		self.device = device
-		# module_list = [self._create_first_layer(device)]
-		# for layer_idx in range(self._layer_begin, self._layer_end):
-		# 	module_list.append(self._create_transformer_layer(device, layer_idx=layer_idx))
-		# if hasattr(args, 'skip_lm_head') and args.skip_lm_head:
-		# 	pass
-		# else:
-		# 	module_list.append(self._create_last_layer(device))
-		# self.model = nn.Sequential(*module_list).to(device)
-
 		self.model = nn.Sequential().to(device)
 		#
 		layer = self._create_first_layer(device)
@@ -123,11 +110,6 @@ class GPTStageFirst(GPTStageBase):
 	def __init__(self, args, config, device):
 		super(GPTStageFirst, self).__init__(args, config)
 		self.device = device
-		# module_list = [self._create_first_layer(device)]
-		# for layer_idx in range(self._layer_begin, self._layer_end):
-		# 	module_list.append(self._create_transformer_layer(layer_idx=layer_idx))
-		# self.model = nn.Sequential(*module_list).to(device)
-		#
 		self.model = nn.Sequential().to(device)
 		#
 		layer = self._create_first_layer(device)
@@ -147,11 +129,6 @@ class GPTStageMiddle(GPTStageBase):
 	def __init__(self, args, config, device):
 		super(GPTStageMiddle, self).__init__(args, config)
 		self.device = device
-		# module_list = []
-		# for layer_idx in range(self._layer_begin, self._layer_end):
-		# 	module_list.append(self._create_transformer_layer(layer_idx=layer_idx))
-		# self.model = nn.Sequential(*module_list).to(device)
-
 		self.model = nn.Sequential().to(device)
 		for layer_idx in range(self._layer_begin, self._layer_end):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
@@ -167,17 +144,6 @@ class GPTStageLast(GPTStageBase):
 	def __init__(self, args, config, device):
 		super(GPTStageLast, self).__init__(args, config)
 		self.device = device
-		# module_list = []
-		# for layer_idx in range(self._layer_begin, self._layer_end):
-		# 	module_list.append(self._create_transformer_layer(layer_idx=layer_idx))
-
-		# if hasattr(args, 'skip_lm_head') and args.skip_lm_head:
-		# 	pass
-		# else:
-		# 	module_list.append(self._create_last_layer())
-
-		# self.model = nn.Sequential(*module_list).to(device)
-
 		self.model = nn.Sequential().to(device)
 		for layer_idx in range(self._layer_begin, self._layer_end):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)

@@ -177,7 +177,6 @@ class GPTEmbeddings(nn.Module):
 		return module
 
 	def forward(self, input_ids, *args, **kargs):
-
 		# input ids
 		input_shape = input_ids.size()
 		input_ids = input_ids.view(-1, input_shape[-1])
