@@ -16,7 +16,6 @@ from torch.autograd.profiler import record_function
 from torch.distributed import supports_complex, Backend, default_pg_timeout
 from torch._C._distributed_c10d import (
     ProcessGroup,
-    ProcessGroupOptions,
     Work,
     BroadcastOptions,
     AllreduceOptions,

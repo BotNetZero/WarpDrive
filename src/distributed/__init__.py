@@ -11,6 +11,7 @@ from torch._C._distributed_c10d import Store, PrefixStore
 from .group import Group
 from .manager import _group_manager
 from .helper import new_process_group_helper, store_based_barrier
+from .communicater import send, recv
 
 logger = logging.getLogger(__name__)
 
