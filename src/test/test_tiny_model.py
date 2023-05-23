@@ -2,7 +2,7 @@
 """
 Author        : Di Niu
 CreatedDate   : 2023/05/20
-Description   :
+Description   : tiny model的推理
 """
 import os, sys
 sys.path.append(os.getcwd())

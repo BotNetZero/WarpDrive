@@ -2,7 +2,7 @@
 """
 Author        : Di Niu
 CreatedDate   : 2023/05/17
-Description   :
+Description   : pipeline模型测试
 """
 import os, sys
 sys.path.append(os.getcwd())

@@ -5,7 +5,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 1. :building_construction: topology:
 	- :white_check_mark: cluster mode
 	- :building_construction: CS mode
-2. :building_construction: distributed communication (optimize torch.distribtued.distributed_c10d)
+2. :building_construction: distributed communication (optimize c10d)
 	- :building_construction: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm

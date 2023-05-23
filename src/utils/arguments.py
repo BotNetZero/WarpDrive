@@ -77,6 +77,8 @@ def _model_arguments(parser):
 
 
 def _add_training_args(parser):
+	parser.add_argument("--task_name", type=str, default="OIG/unified_chip2.jsonl:0.1",
+		     			help="data files related to each task (default: OIG/unified_chip2.jsonl:0.1)")
 	parser.add_argument('--local_batch_size', type=int, default=10,
 						help='Batch size per model instance (local batch size). '
 						'Global batch size is local batch size times data parallel size times number of micro batches.')
