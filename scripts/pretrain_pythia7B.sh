@@ -14,12 +14,18 @@ echo "local rank: ${local_rank}"
 cuda_id=$5;
 echo "cuda index: ${cuda_id}"
 
+datasets="\
+OIG/unified_chip2.jsonl:0.1,\
+OIG/unified_conv_finqa.jsonl:0.1 \
+"
+
 args="--group_name usr \
 --mode cluster \
 --pp_backend nccl \
 --dp_backend nccl \
 --tp_backend nccl \
 --dist_url ${tcp_url} \
+--task_name ${datasets} \
 --gpus 1 1 \
 --first_last_stage_merge False \
 --stage ${stage} \

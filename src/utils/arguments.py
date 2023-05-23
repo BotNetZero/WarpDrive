@@ -13,6 +13,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description='Warp Drive training engine')
 	_add_distributed_arguments(parser)
 	_model_arguments(parser)
+	_add_training_args(parser)
 
 	args = parser.parse_args()
 
@@ -23,6 +24,8 @@ def parse_args():
 	else:
 		raise NotImplementedError(f"LLM {args.model_name} not support YET!!!")
 
+	#
+	args.seq_length = configs.seq_length
 
 	return args, configs
 
@@ -68,6 +71,63 @@ def _model_arguments(parser):
                        'loss scaling is used.')
 	parser.add_argument("--num_layers", type=int,
 		     			help="number of model layers at current stage")
+	parser.add_argument('--seed', type=int, default=1234,
+					help='Random seed used for python, numpy, '
+					'pytorch, and cuda.')
+
+
+def _add_training_args(parser):
+	parser.add_argument('--local_batch_size', type=int, default=10,
+						help='Batch size per model instance (local batch size). '
+						'Global batch size is local batch size times data parallel size times number of micro batches.')
+	parser.add_argument('--global-batch-size', type=int, default=None,
+						help='Training batch size. If set, it should be a '
+						'multiple of micro-batch-size times data-parallel-size. '
+						'If this value is None, then '
+						'use micro-batch-size * data-parallel-size as the '
+						'global batch size. This choice will result in 1 for '
+						'number of micro-batches.')
+	parser.add_argument('--rampup-batch-size', nargs='*', default=None,
+						help='Batch size ramp up with the following values:'
+						'  --rampup-batch-size <start batch size> '
+						'                      <batch size incerement> '
+						'                      <ramp-up samples> '
+						'For example:'
+						'   --rampup-batch-size 16 8 300000 \ '
+						'   --global-batch-size 1024'
+						'will start with global batch size 16 and over '
+						' (1024 - 16) / 8 = 126 intervals will increase'
+						'the batch size linearly to 1024. In each interval'
+						'we will use approximately 300000 / 126 = 2380 samples.')
+	parser.add_argument('--recompute-activations', action='store_true',
+						help='recompute activation to allow for training '
+						'with larger models, sequences, and batch sizes.')
+	parser.add_argument('--recompute-granularity', type=str, default=None,
+						choices=['full', 'selective'],
+						help='Checkpoint activations to allow for training '
+						'with larger models, sequences, and batch sizes. '
+						'It is supported at two granularities 1) full: '
+						'whole transformer layer is recomputed, '
+						'2) selective: core attention part of the transformer '
+						'layer is recomputed.')
+	parser.add_argument('--distribute-saved-activations',
+						action='store_true',
+						help='If set, distribute recomputed activations '
+						'across model parallel group.')
+	parser.add_argument('--recompute-method', type=str, default=None,
+						choices=['uniform', 'block'],
+						help='1) uniform: uniformly divide the total number of '
+						'Transformer layers and recompute the input activation of '
+						'each divided chunk at specified granularity, '
+						'2) recompute the input activations of only a set number of '
+						'individual Transformer layers per pipeline stage and do the '
+						'rest without any recomputing at specified granularity'
+						'default) do not apply activations recompute to any layers')
+	parser.add_argument('--recompute-num-layers', type=int, default=1,
+						help='1) uniform: the number of Transformer layers in each '
+						'uniformly divided recompute unit, '
+						'2) block: the number of individual Transformer layers '
+						'to recompute within each pipeline stage.')
 
 # def _add_mixed_precision_args(parser):
 #     group = parser.add_argument_group(title='mixed precision')

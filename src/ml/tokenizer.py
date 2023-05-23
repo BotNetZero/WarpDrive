@@ -53,6 +53,13 @@ class Tokenizer:
 		token_ids = self.tokenizer.encode(text)
 		return token_ids
 
+	def decode(self, input_ids):
+		"""
+		将input_ids decode成text
+		tensor([2,4,7]) ==> "xxx"
+		"""
+		return self.tokenizer.decode(input_ids)
+
 	def encoding(self, texts):
 		"""
 		利用LLM对text做编码, 获取句子表征
