@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Author        : Di Niu
+CreatedDate   : 2023/05/23
+Description   : streaming datasets, w/o padding. each sample has MAX_SEQUENCE length
+"""
 import os
 import numpy as np
 import random
@@ -5,10 +11,10 @@ import torch
 from torch.utils.data import IterableDataset, DataLoader
 from itertools import cycle, islice
 from datasets import Dataset
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset
 from src.common.constants import DATA_PATH
 
-SHOW_DATA = int(os.environ.get('SHOW_DATA', 1))
+SHOW_DATA = int(os.environ.get('SHOW_DATA', 0))
 
 class StreamDataset(IterableDataset):
     default_doc_separator = '\n'

@@ -18,9 +18,9 @@ a LLM training engine under cluster, CS(Client-Server) environment
 5. :stop_sign: data parallel
 6. :stop_sign: tensor parallel
 7. :stop_sign: sequence parallel
-8. :building_construction: training data (open source)
+8. :white_check_mark: training data (open source)
 	- :white_check_mark: OIG
-	- :building_construction: streaming style dataset
+	- :white_check_mark: streaming style dataset, w/o padding
 9. :building_construction: models
 	- :white_check_mark: Pythia7B
 	- :stop_sign: parallel models
@@ -33,6 +33,7 @@ a LLM training engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: empty model init, device map, partial loading
 	- :white_check_mark: fp16
 	- :stop_sign: int8
+	- :stop_sign: pruning
 
 
 ## GPUs topology
