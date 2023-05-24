@@ -11,17 +11,17 @@ from src.distributed import new_process_group, send, recv
 from src.distributed.group import Group
 
 
-def run(group: Group, rank: int, size: int):
+def run(group: Group):
     """ Distributed function to be implemented later. """
     tensor = torch.zeros(1)
-    if rank == 0:
+    if group.rank == 0:
         tensor += 1
         # Send the tensor to process 1
         send(tensor, group, 1)
     else:
         # Receive tensor from process 0
         recv(tensor, group, src=0)
-    print(os.getpid(), '-> Rank ', rank, ' has data ', tensor[0])
+    print(os.getpid(), '-> Rank ',group.rank, ' has data ', tensor[0])
 
 
 def init_process(rank, size, fn, backend='gloo'):
@@ -33,7 +33,7 @@ def init_process(rank, size, fn, backend='gloo'):
 
     # mydist.init_process_group("1", backend, rank=rank, world_size=size)
 
-    fn(group, rank, size)
+    fn(group)
 
 # usage: python -m src.test.test_communicater
 if __name__ == "__main__":
