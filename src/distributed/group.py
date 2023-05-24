@@ -16,6 +16,7 @@ class Group:
 			store: PrefixStore,
 			config: str,
 			level: int = 0,
+			parent_name: str = None,
 		):
 		"""
 		_world.pg_map[pg] = (backend, prefix_store)
@@ -37,3 +38,8 @@ class Group:
 		self.rank_map = {i: i for i in range(pg.size())}
 
 		self.level = level
+		self.parent_name = parent_name
+		if self.level == 0 and self.parent_name is not None:
+			raise RuntimeError(
+				"Top level group should not have parent group"
+			)

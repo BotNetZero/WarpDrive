@@ -3,6 +3,7 @@
 
 import time
 import logging
+from typing import Union
 from datetime import timedelta
 
 import torch
@@ -39,13 +40,15 @@ STORE_BASED_BARRIER_PREFIX = "store_based_barrier_key"
 
 
 def new_process_group_helper(
-    group_size,
-    group_rank,
-    backend,
-    store,
-    pg_options=None,
-    group_name=None,
-    timeout=default_pg_timeout,
+    group_size: int,
+    group_rank: int,
+    backend: Union[str, Backend],
+    store: PrefixStore,
+    group_name: str=None,
+    group_level: int=0,
+    parent_name: str=None,
+    pg_options: ProcessGroup.Options=None,
+    timeout: timedelta=default_pg_timeout,
 ) -> Group:
     global _group_manager
 
@@ -141,7 +144,7 @@ def new_process_group_helper(
             pg._register_backend(torch.device(device), backend_type, backend_class)
 
     # new group add it to the group manager
-    group = Group(group_name, group_size, group_rank, pg, backend, store, str(backend_config))
+    group = Group(group_name, group_size, group_rank, pg, backend, store, str(backend_config), level=group_level, parent_name=parent_name)
     _group_manager.add_group(group)
 
     return group

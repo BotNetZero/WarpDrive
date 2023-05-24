@@ -40,6 +40,12 @@ _pickler = pickle.Pickler
 _unpickler = pickle.Unpickler
 
 
+def _exist_group(group: Union[str,Group]):
+    if group == None:
+        return False
+    return _group_manager.exist_group(group)
+
+
 def _check_group(group: Group):
     if group == None:
         raise ValueError(
