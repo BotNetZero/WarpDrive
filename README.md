@@ -5,8 +5,8 @@ a LLM training engine under cluster, CS(Client-Server) environment
 1. :building_construction: topology:
 	- :white_check_mark: cluster mode
 	- :building_construction: CS mode
-2. :building_construction: distributed communication (optimize c10d)
-	- :building_construction: group, subgroup
+2. :white_check_mark: distributed communication (optimize c10d)
+	- :white_check_mark: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm
 3. :building_construction: pipeline parallel 
@@ -86,11 +86,13 @@ dpg: [(1,2,3), (4,5,6)]
 	- sequence 
 	- 1f1b w/o interleave
 	- 1f1b with interleave
+- learning rate schedule:
 
-4. Mixed precision
+
+4. Mixed precision training
 - fp32
 - fp16, bf16
-- fp8 (nvidia transformer engine) with Hopper GPU architectur
+
 
 ## training data
 Open source training data

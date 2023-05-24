@@ -19,6 +19,9 @@ OIG/unified_chip2.jsonl:0.1,\
 OIG/unified_conv_finqa.jsonl:0.1 \
 "
 
+export SHOW_DATA=0
+
+
 args="--group_name usr \
 --mode cluster \
 --pp_backend nccl \
