@@ -11,10 +11,7 @@ import logging
 import argparse
 import datetime
 import traceback
-import torch
-import torch.cuda as cuda
-import torch.distributed as dist
-# import src.distributed.c10d as dist
+import src.distributed as mydist
 
 logger = logging.getLogger(__name__)
 
@@ -32,22 +29,24 @@ def main():
 
 	#172.17.8.193
 	try:
-		dist.init_process_group(
+		group = mydist.new_process_group(
+			"g0",
 			backend="gloo",
 			init_method=tcp_init,
 			timeout=datetime.timedelta(seconds=60),
-			rank=args.rank,
 			world_size=args.size,
+			rank=args.rank,
 		)
 		end_time = datetime.datetime.now()
 		print("success... finished init PG at: ", end_time)
-
-		dist.destroy_process_group()
+		
+		mydist.close_process_group(group)
 		print("destroy PG.....")
 	except Exception as exc:
 		end_time = datetime.datetime.now()
 		print("fail!!! Init PG at: ", end_time)
 		traceback.print_exc()
+
 
 
 if __name__ == "__main__":
