@@ -17,16 +17,17 @@ from src.distributed.comm_utils import get_pp_group_rank, get_pp_world_size, get
 from src.data.data_utils import get_train_data_loader
 from src.common.constants import MODEL_PATH
 from src.ml.tokenizer import Tokenizer
+from src.ml.trainer import Trainer, Evaluator
 from src.ml.gptneox import GPTStageFirst, GPTStageLast, GPTStageMiddle, GPTStageFull
 from src.optimization.optimizer import create_optimizer, get_fp16_optimizer
 
+pp_rank = get_pp_group_rank()
+pp_world_size = get_pp_world_size()
 
 def get_model(args, configs, device):
 	"""
 	基于rank所处stage创建model
 	"""
-	pp_rank = get_pp_group_rank()
-	pp_world_size = get_pp_world_size()
 	if pp_world_size == 1:
 		model = GPTStageFull(args, configs, device)
 	elif pp_rank == 0:
@@ -57,12 +58,14 @@ def get_optimizer(args, configs, model, device):
 
 def pretrain():
 	"""
-
+	模型预训练
 	"""
 	args, configs = parse_args()
 	init_distributed_env(args)
 	comm = get_main_group_comm()
+
 	device = torch.device(args.cuda_id)
+	cuda.set_device(device)
 
 	# model, optimizer, dataloader
 	model_path = os.path.join(MODEL_PATH, "pythia_7b")
@@ -71,8 +74,62 @@ def pretrain():
 	model = get_model(args, configs, device)
 	train_dataloader = get_train_data_loader(args, tokenizer)
 	optimizer, scheduler = get_optimizer(args, configs, model, device)
+	optimizer.reload_model_params()
 
 	# traing & eval
+	trainer = Trainer(args, configs, device, model, optimizer, scheduler)
+	# evaluater = Evaluator()
+
+	#
+	assert args.data_group_size == 1		# TODO: 暂时忽略data parallel
+
+	stop_flag = torch.zeros(1, dtype=torch.int32).to(device)					# barrier flag
+	input_ids = torch.zeros(													# recv from master rank
+		args.batch_size, args.seq_length, dtype=torch.int32, device=device		#
+	)
+	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
+	data_stream = cuda.Stream(device)	# stream for data broadcast
+
+	# master rank: pp_rank 0, dp_rank 0
+	if pp_rank == 0:						# TODO: dp_rank也是判断条件
+		steps = 0
+		for i, global_batch_X in enumerate(train_dataloader, 1):
+			steps += 1
+
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			if stop_flag.item() == 1:
+				break
+
+			global_input_ids = global_batch_X["input_ids"]				#
+
+			# input_ids_list = global_input_ids.chunk()						# # TODO: 分发数据做data parallel
+			input_ids = global_input_ids.to(device)							# 当前rank的数据
+			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# input_ids在last stage用作label数据
+
+			trainer()
+
+			if steps > args.total_steps:
+				stop_flag.data[:] = 1
+	# last stage
+	elif pp_rank == pp_world_size-1:
+		while True:
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
+			if stop_flag.item() == 1:
+				break
+			# 接收input_ids
+			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)
+			labels = input_ids.clone()
+
+			trainer()
+
+	# middle stage
+	else:
+		while True:
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
+			if stop_flag.item() == 1:
+				break
+			# 接收input_ids, middle stage不需要
+			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# TODO: 改进communicator, 在subgroup中做broadcast
 
 
 if __name__ == "__main__":

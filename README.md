@@ -1,5 +1,5 @@
 # WarpDrive
-a LLM training engine under cluster, CS(Client-Server) environment
+a LLM training/inference engine under cluster, CS(Client-Server) environment
 
 ## tasks:
 1. :building_construction: topology:

@@ -14,7 +14,6 @@ def parse_args():
 	_add_distributed_arguments(parser)
 	_model_arguments(parser)
 	_add_training_args(parser)
-	_add_mixed_precision_args(parser)
 
 	args = parser.parse_args()
 
@@ -27,8 +26,17 @@ def parse_args():
 
 	#
 	args.seq_length = configs.seq_length
+	if args.global_batch_size is None:
+		args.global_batch_size = args.batch_size * args.data_group_size
+	else:
+		assert args.global_batch_size == args.batch_size * args.data_group_size
+
+	if args.batch_size % args.micro_batch_num != 0:
+		raise ValueError(f"specify evenly divisible requirement: batch_size [{args.batch_size}] % micro_batch_num [{args.micro_batch_num}] != 0")
+	args.micro_batch_size = args.batch_size // args.micro_batch_num
 
 	return args, configs
+
 
 def _add_distributed_arguments(parser):
 	parser.add_argument("--group_name", type=str, default="user",
@@ -90,20 +98,16 @@ def _model_arguments(parser):
                         help='learning rate ')
 
 
-
 def _add_training_args(parser):
 	parser.add_argument("--task_name", type=str, default="OIG/unified_chip2.jsonl:0.1",
 		     			help="data files related to each task (default: OIG/unified_chip2.jsonl:0.1)")
-	parser.add_argument('--local_batch_size', type=int, default=10,
-						help='Batch size per model instance (local batch size). '
-						'Global batch size is local batch size times data parallel size times number of micro batches.')
-	parser.add_argument('--global-batch-size', type=int, default=None,
-						help='Training batch size. If set, it should be a '
-						'multiple of micro-batch-size times data-parallel-size. '
-						'If this value is None, then '
-						'use micro-batch-size * data-parallel-size as the '
-						'global batch size. This choice will result in 1 for '
-						'number of micro-batches.')
+	parser.add_argument('--batch_size', type=int, default=10,
+						help='Batch size per rank (default: 10). '
+						'global_batch_size = batch_size * data_group_size')
+	parser.add_argument("--micro_batch_num", type=int, default=5,
+		     			help="batch chunks for pipeline schedule (default: 5)")
+	parser.add_argument('--global_batch_size', type=int, default=None,
+						help='Training batch size summing all ranks in stage 0')
 	parser.add_argument('--rampup-batch-size', nargs='*', default=None,
 						help='Batch size ramp up with the following values:'
 						'  --rampup-batch-size <start batch size> '

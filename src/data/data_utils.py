@@ -164,7 +164,7 @@ def get_train_data_loader(args, tokenizer, state_dict=None):
         stream_dataset.load_state_dict(state_dict)
 
     train_data_loader = DataLoader(stream_dataset,
-								batch_size=args.local_batch_size * args.data_group_size,
+								batch_size=args.batch_size * args.data_group_size,
 								shuffle=False,
 								pin_memory=True,
 								collate_fn=None)

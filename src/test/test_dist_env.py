@@ -21,14 +21,10 @@ def main():
 	args, _ = parse_args()
 	init_distributed_env(args)
 	comm = get_main_group_comm()
+
 	device = torch.device(args.cuda_id)
-
-	#
-	compute_stream = cuda.default_stream(device)		# stream for computing
-	send_stream = cuda.Stream(device)					# stream for p2p send
-	recv_stream = cuda.Stream(device)					# stream for p2p recv
-
 	cuda.set_device(device)
+
 	compute_stream = cuda.default_stream(device)		# stream for computing
 	send_stream = cuda.Stream(device)					# stream for p2p send
 	recv_stream = cuda.Stream(device)					# stream for p2p recv
