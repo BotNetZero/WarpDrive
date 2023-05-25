@@ -35,6 +35,8 @@ class Communicator:
 		:param send_stream: cuda stream for p2p send
 		:param tensor:
 		:param dst_rank: global rank of destination
+		:param wait_stream: synchronize with wait_stream
+		:param sub_pg:
 		"""
 		with cuda.stream(send_stream):
 			send_stream.wait_stream(wait_stream)
@@ -45,3 +47,12 @@ class Communicator:
 			recv_stream.wait_stream(wait_stream)
 			dist.recv(tensor, src_rank, sub_pg)
 
+	def broadcast(self, collective_stream, tensor, src_rank, wait_stream, sub_pg):
+		"""
+		execute broadcast task under collective_stream ctrl
+		:param
+		"""
+		with cuda.stream(collective_stream):
+			if wait_stream is not None:
+				collective_stream.wait_stream(wait_stream)
+			dist.broadcast(tensor, src_rank, sub_pg)
