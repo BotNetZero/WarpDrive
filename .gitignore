@@ -2,3 +2,6 @@
 venv/
 local/
 .vscode/
+datafiles
+saved_models
+src/tmp
