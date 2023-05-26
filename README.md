@@ -9,9 +9,11 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm
+	- :white_check_mark: collective comm
 3. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
 	- :building_construction: sequence pipeline schedule
+	- :stop_sign: 1f1b, interleave schedule
 4. :building_construction: activation recomputation
 	- :building_construction: full mode
 	- :stop_sign: selective mode
@@ -34,7 +36,11 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: fp16
 	- :stop_sign: int8
 	- :stop_sign: pruning
-
+	- :stop_sign: LoRa, QLoRa
+13. :building_construction: optimizer
+	- :building_construction: mixed precision
+	- :building_construction: loss scaler
+	- :building_construction: lr scheduler
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size
@@ -86,6 +92,8 @@ dpg: [(1,2,3), (4,5,6)]
 	- sequence 
 	- 1f1b w/o interleave
 	- 1f1b with interleave
+![avatar](./docs/imgs/pipeline_schedule.jpg)
+
 - learning rate schedule:
 
 

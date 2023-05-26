@@ -50,9 +50,17 @@ class Communicator:
 	def broadcast(self, collective_stream, tensor, src_rank, wait_stream, sub_pg):
 		"""
 		execute broadcast task under collective_stream ctrl
-		:param
 		"""
 		with cuda.stream(collective_stream):
 			if wait_stream is not None:
 				collective_stream.wait_stream(wait_stream)
 			dist.broadcast(tensor, src_rank, sub_pg)
+
+	def all_gather(self, collective_stream, tensor, output_tensor_list, wait_stream, sub_pg):
+		"""
+		gather tensor from each rank into output_tensor_list
+		"""
+		with cuda.stream(collective_stream):
+			if wait_stream is not None:
+				collective_stream.wait_stream(wait_stream)
+			dist.all_gather(output_tensor_list, tensor, group=sub_pg)

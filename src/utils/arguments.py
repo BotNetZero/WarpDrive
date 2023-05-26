@@ -25,6 +25,11 @@ def parse_args():
 		raise NotImplementedError(f"LLM {args.model_name} not support YET!!!")
 
 	#
+	args.world_size = sum(args.gpus)
+	args.pipeline_group_size = len(args.gpus)	# pipeline group size
+	if args.pipeline_group_size < 2:
+		raise ValueError(f"pipeline_group_size [{args.pipeline_group_size}] should be larger than 2")
+
 	args.seq_length = configs.seq_length
 	if args.global_batch_size is None:
 		args.global_batch_size = args.batch_size * args.data_group_size

@@ -40,12 +40,13 @@ class Trainer:
 		self.compute_stream = cuda.default_stream(device)	#
 		self.send_stream = cuda.Stream(device)
 		self.recv_stream = cuda.Stream(device)
+		self.collect_stream = cuda.Stream(device)			#
 		#
 		self.pp_rank = get_pp_group_rank()
 		self.pp_world_size = get_pp_world_size()
 		# first stage
 		if self.pp_rank == 0:
-			self.input_micro_batches = None			# input ids
+			self.input_micro_batches = None			# micro batched input ids
 			self.output_micro_batches_grad = [		# recv tensor from next rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
@@ -92,13 +93,21 @@ class Trainer:
 		"""
 		one training step
 		"""
-		self._forward_step(input_ids)
+		# input_ids [batch_size, seq_len] ==> [micro_batch_size, seq_len] * micro_batch_num
+		if self.pp_rank == 0:
+			assert input_ids is not None
+			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num, dim=0)
+		# schedule
+		
+		preds = self._forward_step(input_ids)
+		loss = self._backward_step(preds, targets)
 
-	def _forward_step(self, input_ids, batch_Y=None):
+	def _forward_step(self, input_ids):
 		"""
-		training step
+		:param input_ids:
 		"""
 		pass
+
 
 	def _backward_step(self):
 		pass
@@ -111,14 +120,11 @@ class Trainer:
 		2/ pipeline schedule
 		3/ training step
 		"""
-		# optimizer scale
-		scales_buffer = [torch.ones_like(self.optimizer.grad_scaler._scale) for _ in range(self.pipeline_group_size)]
-		self.comm.all_gather(self.optimizer.grad_scaler._scale, scales_buffer)
-		self.optimizer.grad_scaler._scale.data[:] = min([s.item() for s in scales_buffer])
-
-		if self.pp_rank == 0:
-			assert input_ids is not None
-			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num)
+		# update loss scale
+		if not self.args.loss_scale:	# dynamic scaler
+			scales_buffer = [torch.ones_like(self.optimizer.grad_scaler._scale) for _ in range(self.args.pipeline_group_size)]
+			self.comm.all_gather(self.optimizer.grad_scaler._scale, scales_buffer)
+			self.optimizer.grad_scaler._scale.data[:] = min([s.item() for s in scales_buffer])
 
 		# zero grad
 		self.zero_input_grad()
