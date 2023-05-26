@@ -153,6 +153,8 @@ def _add_training_args(parser):
 		     			help="warmup period for LRScheduler (default: 10)")
 	parser.add_argument("--total_steps", type=int, default=10000,
 		     			help="total training steps (default: 10000)")
+	parser.add_argument('--evaluation_steps', type=int, default=0, metavar='S',
+                        help='every x steps, do evaluation. (0 means do not do evaluation)')
 
 
 # def _add_mixed_precision_args(parser):

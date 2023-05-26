@@ -76,41 +76,58 @@ class Trainer:
 				) for _ in range(self.args.micro_batch_num)
 			]
 
+		# 全局数据
+		self.global_step = 0
+
 	def zero_input_grad(self):
 		"""
+		input_micro_batches的参数没有在optimizer中 手动清零
 		"""
 		if self.input_micro_batches:
 			for input_micro_batch in self.input_micro_batches:
 				if input_micro_batch.grad is not None:
 					input_micro_batch.grad.zero_()
 
-	def _step(self):
-		pass
+	def _step(self, input_ids, targets):
+		"""
+		one training step
+		"""
+		self._forward_step(input_ids)
 
 	def _forward_step(self, input_ids, batch_Y=None):
 		"""
 		training step
 		"""
-		self.optimizer.zero_grand()
+		pass
 
 	def _backward_step(self):
 		pass
 
 
-	def __call__(self, input_ids, targets, print_step=100):
+	def __call__(self, input_ids, targets):
 		"""
 		steps:
 		1/ init: micro batches,
+		2/ pipeline schedule
+		3/ training step
 		"""
-		# # optimizer scale
-		# scales_buffer = [torch.ones_like(self.optimizer.grad_scaler._scale) for _ in range(self.pipeline_group_size)]
-		# self.comm.all_gather(self.optimizer.grad_scaler._scale, scales_buffer)
-		# self.optimizer.grad_scaler._scale.data[:] = min([s.item() for s in scales_buffer])
+		# optimizer scale
+		scales_buffer = [torch.ones_like(self.optimizer.grad_scaler._scale) for _ in range(self.pipeline_group_size)]
+		self.comm.all_gather(self.optimizer.grad_scaler._scale, scales_buffer)
+		self.optimizer.grad_scaler._scale.data[:] = min([s.item() for s in scales_buffer])
 
 		if self.pp_rank == 0:
 			assert input_ids is not None
 			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num)
 
+		# zero grad
+		self.zero_input_grad()
+		self.optimizer.zero_grad(set_to_none=False)
+
+		#
+		self._step(input_ids, targets)
+
+		self.global_step += 1
 
 
 class Evaluator:

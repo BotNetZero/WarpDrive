@@ -89,13 +89,9 @@ def pretrain():
 	)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
 	data_stream = cuda.Stream(device)	# stream for data broadcast
-
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
-		steps = 0
 		for i, global_batch_X in enumerate(train_dataloader, 1):
-			steps += 1
-
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
 			if stop_flag.item() == 1:
 				break
@@ -106,10 +102,17 @@ def pretrain():
 			input_ids = global_input_ids.to(device)							# 当前rank的数据
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# input_ids在last stage用作label数据
 
-			trainer()
+			# one training step
+			trainer(input_ids, None)		# first stage向next rank发送数据
 
-			if steps > args.total_steps:
+			# # TODO: evaluator
+			# if trainer.global_step % args.evaluation_steps == 0:
+			# 	evaluator()
+
+			#
+			if trainer.global_steps > args.total_steps:
 				stop_flag.data[:] = 1
+
 	# last stage
 	elif pp_rank == pp_world_size-1:
 		while True:
@@ -120,7 +123,12 @@ def pretrain():
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)
 			labels = input_ids.clone()
 
-			trainer()
+			# one training step
+			trainer(None, labels)			# last stage接收prev rank的input数据
+
+			# # TODO: evaluator
+			# if trainer.global_step % args.evaluation_steps == 0:
+			# 	evaluator()
 
 	# middle stage
 	else:
@@ -130,6 +138,13 @@ def pretrain():
 				break
 			# 接收input_ids, middle stage不需要
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# TODO: 改进communicator, 在subgroup中做broadcast
+
+			# one training step
+			trainer(None, None)				# middle stage从prev rank接收数据，向next rank发送数据
+
+			# # TODO: evaluator
+			# if trainer.global_step % args.evaluation_steps == 0:
+			# 	evaluator()
 
 
 if __name__ == "__main__":
