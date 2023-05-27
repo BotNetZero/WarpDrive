@@ -12,7 +12,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: collective comm
 3. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
-	- :building_construction: sequence pipeline schedule
+	- :white_check_mark: sequence pipeline schedule
 	- :stop_sign: 1f1b, interleave schedule
 4. :building_construction: activation recomputation
 	- :building_construction: full mode
