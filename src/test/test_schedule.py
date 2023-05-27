@@ -2,7 +2,7 @@ import os, sys
 sys.path.append(os.getcwd())
 
 
-class Test:
+class TestSchedule:
 	def __init__(self, pp_rank, world_size, micro_batch_num) -> None:
 		self.pp_rank = pp_rank
 		self.pp_world_size = world_size
@@ -54,7 +54,7 @@ class Test:
 
 
 if __name__ == "__main__":
-	scheduler = Test(pp_rank=0, world_size=3, micro_batch_num=3)
+	scheduler = TestSchedule(pp_rank=0, world_size=3, micro_batch_num=3)
 	for cmd in scheduler:
 		print(cmd)
 

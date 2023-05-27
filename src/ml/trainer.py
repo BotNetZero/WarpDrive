@@ -10,7 +10,7 @@ import torch.cuda as cuda
 from src.common.logger import logger
 from src.distributed.comm_utils import get_main_group_comm, get_pp_group_rank, get_pp_world_size
 from src.utils.conversion import normalize_precision
-
+from src.parallel.schedule import SequenceSchedule
 
 class Trainer:
 	"""
@@ -79,6 +79,7 @@ class Trainer:
 
 		# 全局数据
 		self.global_step = 0
+		self.scheduler = SequenceSchedule(self.args.micro_batch_num)
 
 	def zero_input_grad(self):
 		"""
@@ -98,7 +99,19 @@ class Trainer:
 			assert input_ids is not None
 			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num, dim=0)
 		# schedule
-		
+		for action, micro_batch_idx in self.scheduler:
+			if action == "wait":
+				continue
+			elif action == "fw":
+				# load data
+				# forward
+				self._forward_step()
+				# send activation
+			elif action == "bw":
+				pass
+			else:
+				raise ValueError(f"action [{action}] not support YET!!")
+
 		preds = self._forward_step(input_ids)
 		loss = self._backward_step(preds, targets)
 

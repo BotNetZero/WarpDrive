@@ -38,9 +38,10 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :stop_sign: pruning
 	- :stop_sign: LoRa, QLoRa
 13. :building_construction: optimizer
-	- :building_construction: mixed precision
-	- :building_construction: loss scaler
-	- :building_construction: lr scheduler
+	- :white_check_mark: mixed precision
+	- :white_check_mark: loss scaler
+	- :white_check_mark: lr scheduler
+	- :building_construction: bug fixme
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size

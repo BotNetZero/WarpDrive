@@ -33,7 +33,7 @@ class PipeSchedule:
 
 	def steps(self):
 		"""
-		generate actions: fw, bw, wait, gather...
+		generate actions: fw, bw, wait
 		"""
 		raise NotImplementedError()
 
@@ -75,14 +75,9 @@ class SequenceSchedule(PipeSchedule):
 		"""
 		for clock in range(self.total_steps):	# clock: 0, 1, 2, ...; pp_rank: 0, 1, 2, ...
 			self._clock = clock
-			cmds = []
-			#
 			action, micro_batch_idx = self._get_action(clock)
-			if action == "wait":
-				cmds.append("wait")
-			else:
-				cmds.append(f"{action}_{micro_batch_idx}")
-			yield cmds
+			cmd = (action, micro_batch_idx)
+			yield cmd
 
 	def _get_action(self, clock):
 		"""
