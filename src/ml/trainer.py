@@ -8,7 +8,13 @@ import torch
 import torch.nn as nn
 import torch.cuda as cuda
 from src.common.logger import logger
-from src.distributed.comm_utils import get_main_group_comm, get_pp_group_rank, get_pp_world_size
+from src.distributed.comm_utils import (
+	get_main_group_comm,
+	get_pp_group_rank,
+	get_pp_world_size,
+	get_pp_prev_global_rank,
+	get_pp_next_global_rank,
+)
 from src.utils.conversion import normalize_precision
 from src.parallel.schedule import SequenceSchedule
 
@@ -43,10 +49,18 @@ class Trainer:
 		self.collect_stream = cuda.Stream(device)			#
 		#
 		self.pp_rank = get_pp_group_rank()
+		self.pp_prev_rank = get_pp_prev_global_rank()
+		self.pp_next_rank = get_pp_next_global_rank()
 		self.pp_world_size = get_pp_world_size()
 		# first stage
 		if self.pp_rank == 0:
 			self.input_micro_batches = None			# micro batched input ids
+			self.output_micro_batches = [
+				torch.zeros(
+					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
+					requires_grad=False, dtype=self.dtype, device=self.device
+				) for _ in range(self.args.micro_batch_num)
+			]
 			self.output_micro_batches_grad = [		# recv tensor from next rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
@@ -95,31 +109,59 @@ class Trainer:
 		one training step
 		"""
 		# input_ids [batch_size, seq_len] ==> [micro_batch_size, seq_len] * micro_batch_num
-		if self.pp_rank == 0:
+		if self.pp_rank == 0:						# first stage处理input tokens
 			assert input_ids is not None
 			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num, dim=0)
+		if self.pp_rank == self.pp_world_size-1:	# last stage处理labels
+			assert targets is not None
+			self.target_micro_batches = targets.chunk(self.args.micro_batch_num, dim=0)
 		# schedule
 		for action, micro_batch_idx in self.scheduler:
 			if action == "wait":
 				continue
 			elif action == "fw":
-				# load data
-				# forward
-				self._forward_step()
-				# send activation
+				micro_batch = self._forward_step(micro_batch_idx)
 			elif action == "bw":
-				pass
+				self._backward_step()
 			else:
 				raise ValueError(f"action [{action}] not support YET!!")
 
-		preds = self._forward_step(input_ids)
-		loss = self._backward_step(preds, targets)
 
-	def _forward_step(self, input_ids):
+	def _forward_step(self, micro_batch_idx):
 		"""
+		1/ recev input
+		2/ forward pass
+		3/ send output
 		:param input_ids:
 		"""
-		pass
+		if self.pp_rank == 0:		# first stage
+			# step1: None
+			# step2: fw
+			with cuda.stream(self.compute_stream):
+				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+			# step3: send
+			self.comm.send(self.send_stream, micro_output, self.pp_next_rank, self.compute_stream, None)
+
+		elif self.pp_rank == self.pp_world_size-1:	# last stage
+			# step1: recv input
+			self.comm.recv(self.recv_stream, self.input_micro_batches[micro_batch_idx], self.pp_prev_rank, None, None)
+			# step2: fw
+			with cuda.stream(self.compute_stream):
+				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
+				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+			# step3: None
+
+		else:	# middle stage
+			# step1: recv input
+			self.comm.recv(self.recv_stream, self.input_micro_batches[micro_batch_idx], self.pp_prev_rank, None, None)
+			# step2: fw
+			with cuda.stream(self.compute_stream):
+				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
+				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+			# step3: send
+			self.comm.send(self.send_stream, micro_output, self.pp_next_rank, self.compute_stream, None)
+
+		return micro_output
 
 
 	def _backward_step(self):

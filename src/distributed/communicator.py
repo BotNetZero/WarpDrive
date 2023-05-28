@@ -8,7 +8,7 @@ import torch
 import torch.cuda as cuda
 import src.distributed.c10d as dist
 
-
+# TODO: redesign...
 class Communicator:
 	"""
 	封装torch.distributed的collective comm和p2p comm, 在task stream的控制下通信
