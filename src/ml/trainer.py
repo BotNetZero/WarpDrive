@@ -55,13 +55,7 @@ class Trainer:
 		# first stage
 		if self.pp_rank == 0:
 			self.input_micro_batches = None			# micro batched input ids
-			self.output_micro_batches = [
-				torch.zeros(
-					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
-					requires_grad=False, dtype=self.dtype, device=self.device
-				) for _ in range(self.args.micro_batch_num)
-			]
-			self.output_micro_batches_grad = [		# recv tensor from next rank
+			self.output_micro_batches_grad = [		# gradients from next stage
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=False, dtype=self.dtype, device=self.device
@@ -69,22 +63,22 @@ class Trainer:
 			]
 		# last stage
 		elif self.pp_rank == self.pp_world_size-1:
-			self.input_micro_batches = [			# recv tensor from previous rank
+			self.input_micro_batches = [			# input tensor from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
-			self.output_micro_batches_grad = None		# labels
+			self.output_micro_batches_grad = None	#
 		# middle stage
 		else:
-			self.input_micro_batches = [			# recv tensor from previous rank
+			self.input_micro_batches = [			# input tensor from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
-			self.output_micro_batches_grad = [		# recv tensor from next rank
+			self.output_micro_batches_grad = [		# gradients from next stage
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=False, dtype=self.dtype, device=self.device
@@ -107,25 +101,50 @@ class Trainer:
 	def _step(self, input_ids, targets):
 		"""
 		one training step
+		staged model compute gragh
+		FW:
+			input_micro_batch --> model_0 --> pred_micro_batch
+			stage_0 send(pred_micro_batch) --> stage_1 recv(input_micro_batch)
+			input_micro_batch --> model_1 --> pred_micro_batch
+			...
+		BW:
+			loss --> model_N --> input_micro_batch.grad
+			stage_N send(input_micro_batch.grad) --> stage_N-1 recv(pred_micro_batch.grad)
+			pred_micro_batch --> model_N-1 --> input_micro_batch.grad
+			...
 		"""
 		# input_ids [batch_size, seq_len] ==> [micro_batch_size, seq_len] * micro_batch_num
 		if self.pp_rank == 0:						# first stage处理input tokens
 			assert input_ids is not None
 			self.input_micro_batches = input_ids.chunk(self.args.micro_batch_num, dim=0)
+
+		# targets [batch_size, seq_len] ==> [micro_batch_size, seq_len] * micro_batch_num
 		if self.pp_rank == self.pp_world_size-1:	# last stage处理labels
 			assert targets is not None
-			self.target_micro_batches = targets.chunk(self.args.micro_batch_num, dim=0)
+			target_micro_batches = targets.chunk(self.args.micro_batch_num, dim=0)
+		else:
+			target_micro_batches = [None for _ in range(self.args.micro_batch_num)]
+
+		pred_micro_batches = [None for _ in range(self.args.micro_batch_num)]	# staged model preds
+
 		# schedule
 		for action, micro_batch_idx in self.scheduler:
 			if action == "wait":
 				continue
 			elif action == "fw":
-				micro_batch = self._forward_step(micro_batch_idx)
+				pred_micro_batch = self._forward_step(micro_batch_idx)
+				pred_micro_batches[micro_batch_idx] = pred_micro_batch
 			elif action == "bw":
-				self._backward_step()
+				pred = pred_micro_batches[micro_batch_idx]
+				target = target_micro_batches[micro_batch_idx]
+				self._backward_step(micro_batch_idx, pred, target)
 			else:
 				raise ValueError(f"action [{action}] not support YET!!")
+			# TODO: synchronize
 
+		# all reduce
+		self.optimizer.step()
+		self.scheduler.step()
 
 	def _forward_step(self, micro_batch_idx):
 		"""
@@ -138,9 +157,9 @@ class Trainer:
 			# step1: None
 			# step2: fw
 			with cuda.stream(self.compute_stream):
-				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: send
-			self.comm.send(self.send_stream, micro_output, self.pp_next_rank, self.compute_stream, None)
+			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
 
 		elif self.pp_rank == self.pp_world_size-1:	# last stage
 			# step1: recv input
@@ -148,7 +167,7 @@ class Trainer:
 			# step2: fw
 			with cuda.stream(self.compute_stream):
 				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: None
 
 		else:	# middle stage
@@ -157,15 +176,45 @@ class Trainer:
 			# step2: fw
 			with cuda.stream(self.compute_stream):
 				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				micro_output = self.model(self.input_micro_batches[micro_batch_idx])
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: send
-			self.comm.send(self.send_stream, micro_output, self.pp_next_rank, self.compute_stream, None)
+			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
 
-		return micro_output
+		return micro_pred
 
+	def _backward_step(self, micro_batch_idx, pred, target):
+		"""
+		1/ calculate loss and scale, or recv grad
+		2/ recompute, bw
+		3/ send grad
+		"""
+		if self.pp_rank == self.pp_world_size-1:	# last stage
+			with cuda.stream(self.compute_stream):
+				# step1: loss
+				loss = self.loss_fn(pred, target)
+				# step2: bw
+				self.optimizer.scale(loss).backward()
+			# step 3: send grad
+			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
 
-	def _backward_step(self):
-		pass
+		elif self.pp_rank == 0: 	# first stage
+			# step1: recv grad
+			self.comm.recv(self.recv_stream, self.output_micro_batches_grad[micro_batch_idx], self.pp_next_rank, None, None)
+			# step2: backward
+			with cuda.stream(self.compute_stream):
+				self.compute_stream.wait_stream(self.recv_stream)	# synchronize
+				pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+			# step3: None
+
+		else:	# middle stage
+			# step1: recv grad
+			self.comm.recv(self.recv_stream, self.output_micro_batches_grad[micro_batch_idx], self.pp_next_rank, None, None)
+			# step2: backward
+			with cuda.stream(self.compute_stream):
+				self.compute_stream.wait_stream(self.recv_stream)	# synchronize
+				pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+			# step3: send grad
+			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
 
 
 	def __call__(self, input_ids, targets):

@@ -98,9 +98,9 @@ dpg: [(1,2,3), (4,5,6)]
 - learning rate schedule:
 
 
-4. Mixed precision training
-- fp32
-- fp16, bf16
+4. Quantization
+- post-training quantization
+- mixed precision training: optimizer, weights, buffers, actiovations...
 
 
 ## training data
@@ -114,6 +114,5 @@ Open source training data
 
 
 ## todo
-1. memory access
-2. matrix swap
-3. sparse transformer
+- compute graph for staged models: 在pytorch的compute graph的基础上，将跨机器的model之间的通信封装成Function
+- sparse transformer

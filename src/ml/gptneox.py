@@ -13,6 +13,8 @@ from src.common.constants import MODEL_PATH
 from src.distributed.comm_utils import get_pp_group_rank
 from src.accelerate.big_modeling import init_empty_weights, load_state_dict
 from src.utils.conversion import normalize_precision
+from src.ops.checkpoint import checkpoint
+
 
 class GPTStageBase(nn.Module):
 	def __init__(self, args, config, **kwargs):
@@ -100,9 +102,21 @@ class GPTStageFull(GPTStageBase):
 			layer = self._create_last_layer(device)
 			self.model.append(layer)
 
-	def forward(self, x, **kargs):
-		for module in self.model:
-			x = module(x, **kargs)
+	def _checkpoint_forward(self, x, **kwargs):
+		"""
+		"""
+		def model_forward(x_, **kwargs):
+			for module in self.model:
+				x_ = module(x_, **kwargs)
+			return x_
+		checkpoint(model_forward, x, **kwargs)
+
+	def forward(self, x, **kwargs):
+		if self.args.recompute_activations:
+			x = self._checkpoint_forward(x, **kwargs)
+		else:
+			for module in self.model:
+				x = module(x, **kwargs)
 		return x
 
 
@@ -119,9 +133,9 @@ class GPTStageFirst(GPTStageBase):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
 			self.model.append(layer)
 
-	def forward(self, x, **kargs):
+	def forward(self, x, **kwargs):
 		for module in self.model:
-			x = module(x, **kargs)
+			x = module(x, **kwargs)
 		return x
 
 
@@ -134,9 +148,9 @@ class GPTStageMiddle(GPTStageBase):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
 			self.model.append(layer)
 
-	def forward(self, x, **kargs):
+	def forward(self, x, **kwargs):
 		for module in self.model:
-			x = module(x, **kargs)
+			x = module(x, **kwargs)
 		return x
 
 
@@ -155,8 +169,8 @@ class GPTStageLast(GPTStageBase):
 			layer = self._create_last_layer(device)
 			self.model.append(layer)
 
-	def forward(self, x, **kargs):
+	def forward(self, x, **kwargs):
 		for module in self.model:
-			x = module(x, **kargs)
+			x = module(x, **kwargs)
 
 		return x
