@@ -7,78 +7,128 @@ Description   :
 import os, sys
 sys.path.append(os.getcwd())
 
+# import gc
+# import time
+# import torch
+# import torch.nn as nn
+# import torch.cuda as cuda
+# from torch.utils.checkpoint import checkpoint
+# from src.ml.gptneox import GPTStageFull
+# from src.utils.arguments import parse_args
+# from src.common.constants import MODEL_PATH
+
+
+# def main():
+# 	args, configs = parse_args()
+# 	print("recompute activations:", args.recompute_activations)
+# 	# model_path = os.path.join(MODEL_PATH, "pythia_7b")
+
+# 	# model
+# 	if torch.cuda.is_available():
+# 		device = torch.device("cuda:0")
+# 	else:
+# 		device = "cpu"
+
+# 	micro_batch = 8
+# 	micro_batch_num = 100
+
+# 	input_ids = torch.empty(micro_batch, 100, dtype=torch.long, device=device).random_(1000)
+
+# 	print("<<===========================>>")
+# 	print("normal forward...")
+# 	model = GPTStageFull(args, configs, device)
+# 	for _ in range(micro_batch_num):
+# 		out = model(input_ids, ignore_checkpoint=True)
+
+# 	del model
+# 	gc.collect()
+# 	torch.cuda.empty_cache()
+
+# 	print("<<===========================>>")
+# 	print("normal forward in eval mode...")
+# 	time.sleep(60)
+
+# 	model = GPTStageFull(args, configs, device)
+# 	model.eval()
+# 	for _ in range(micro_batch_num):
+# 		out = model(input_ids, ignore_checkpoint=True)
+
+# 	del model
+# 	gc.collect()
+# 	torch.cuda.empty_cache()
+
+# 	print("<<===========================>>")
+# 	print("checkpointing forward...")
+# 	time.sleep(60)
+
+# 	model = GPTStageFull(args, configs, device)
+# 	for _ in range(micro_batch_num):
+# 		out = model(input_ids, ignore_checkpoint=False)
+
+# if __name__ == "__main__":
+# 	main()
+
 import torch
 import torch.nn as nn
-from src.ops.checkpoint import checkpoint
+import torch.utils.checkpoint as checkpoint
 
-class Test(nn.Module):
-	def __init__(self, checkpoint=True) -> None:
-		super().__init__()
-		self.layer1 = nn.Linear(5, 10)
-		self.layer2 = nn.Linear(10,3)
-		self.relu = nn.ReLU()
-		self.checkpoint = checkpoint
+# Define a sample neural network module
+class MyModel(nn.Module):
+    def __init__(self):
+        super(MyModel, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.fc = nn.Linear(128 * 4 * 4, 10)
 
-	def _checkpoint_forward(self, x):
-		def model_forward(x_):
-			hiddens = self.layer1(x_)
-			print("hidden grand_fn:", hiddens.grad_fn)
-			return self.layer2(self.relu(hiddens))
-		#
-		preds = checkpoint(model_forward, x)
+    def forward(self, x):
+        return self.checkpointed_forward(x)
 
-		return preds
+    def checkpointed_forward(self, x):
+        x = self.conv1(x)
+        x = torch.relu(x)  # Using ReLU activation function
+        x = self.conv2(x)
+        x = torch.relu(x)  # Using ReLU activation function
+        x = x.view(-1, 128 * 4 * 4)
+        x = self.fc(x)
+        return x
 
-	def forward(self, x):
-		if self.checkpoint:
-			preds = self._checkpoint_forward(x)
-		else:
-			hiddens = self.layer1(x)
-			print("hidden grand_fn:", hiddens.grad_fn)
-			preds = self.layer2(self.relu(hiddens))
+# Create an instance of the model
+model = MyModel().to("cuda:0")
 
-		return preds
+# Create some random input
+input_data = torch.randn(1, 3, 32, 32).to("cuda:0")
+
+# Enable gradients for input_data
+input_data.requires_grad_()
+
+# Forward pass without checkpointing
+output_no_checkpoint = model(input_data)
+
+# Print memory usage without checkpointing
+print(f"Memory used without checkpointing: {torch.cuda.memory_allocated()} bytes")
+
+# Compute dummy loss
+loss_no_checkpoint = torch.sum(output_no_checkpoint)
+
+# Backward pass without checkpointing
+loss_no_checkpoint.backward()
 
 
-if __name__ == "__main__":
-	torch.manual_seed(123)
-	input = torch.rand(3, 5)
-	print(input)
-	targets = torch.tensor([1, 0, 2], dtype=torch.long)
-	softmax = nn.Softmax(dim=1)
-	loss_fn = nn.CrossEntropyLoss()
-	#
-	model = Test(checkpoint=False)
+# Clear gradients
+model.zero_grad()
 
-	logits = model(input)
+# Enable checkpointing during forward pass
+torch.backends.cudnn.enabled = False
 
-	print("logits:", logits)
-	preds = softmax(logits)
-	print("preds:", preds)
-	probs, labels = preds.max(dim=1)
-	print(probs, labels)
+# Forward pass with checkpointing
+output_checkpoint = checkpoint.checkpoint(model, input_data)
 
-	loss = loss_fn(preds, targets)
-	print(loss)
+# Print memory usage with checkpointing
+print(f"Memory used with checkpointing: {torch.cuda.memory_allocated()} bytes")
 
-	loss.backward()
-	print(model.layer1.weight.grad)
-	print()
-	print("<<<======================>>>")
-	print()
+# Compute dummy loss
+loss_checkpoint = torch.sum(output_checkpoint)
 
-	model1 = Test(checkpoint=True)
+# Backward pass with checkpointing
+loss_checkpoint.backward()
 
-	logits = model1(input)
-	print(model1.layer1.weight.grad_fn)
-	print("logits:", logits)
-	preds = softmax(logits)
-	print("preds:", preds)
-	probs, labels = preds.max(dim=1)
-	print(probs, labels)
-
-	loss = loss_fn(preds, targets)
-	print(loss)
-
-	loss.backward()
-	print(model1.layer1.weight.grad)

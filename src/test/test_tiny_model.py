@@ -32,7 +32,6 @@ def main():
 	#
 	batch_encoding = tokenizer.tokenize([text]).to(device)
 	print(batch_encoding)
-
 	out = model(batch_encoding["input_ids"])
 	print(out)
 	print(out.shape)

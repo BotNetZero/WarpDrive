@@ -9,11 +9,12 @@ import gc
 from copy import deepcopy
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 from src.common.constants import MODEL_PATH
 from src.distributed.comm_utils import get_pp_group_rank
 from src.accelerate.big_modeling import init_empty_weights, load_state_dict
 from src.utils.conversion import normalize_precision
-from src.ops.checkpoint import checkpoint
+
 
 
 class GPTStageBase(nn.Module):
@@ -44,6 +45,12 @@ class GPTStageBase(nn.Module):
 		self._GPTEmbeddings = GPTEmbeddings
 		self._GPTBlock = GPTBlock
 		self._GPTLMHead = GPTLMHead
+
+	def _checkpoint_forward(self):
+		"""
+		model forward for activation checkpoint
+		"""
+		raise NotImplementedError()
 
 	def _create_first_layer(self, device):
 		with init_empty_weights():
@@ -88,6 +95,7 @@ class GPTStageFull(GPTStageBase):
 		super(GPTStageFull, self).__init__(args, config, full_mode=True)
 		self.device = device
 		self.model = nn.Sequential().to(device)
+		self.recompute_activations = args.recompute_activations
 		#
 		layer = self._create_first_layer(device)
 		self.model.append(layer)
@@ -109,12 +117,15 @@ class GPTStageFull(GPTStageBase):
 			for module in self.model:
 				x_ = module(x_, **kwargs)
 			return x_
-		checkpoint(model_forward, x, **kwargs)
+		logits = checkpoint(model_forward, x, **kwargs)
+		return logits
 
-	def forward(self, x, **kwargs):
-		if self.args.recompute_activations:
+	def forward(self, x, ignore_checkpoint=False, **kwargs):
+		if self.recompute_activations and not ignore_checkpoint:
+			print("forward with checkpointing....")
 			x = self._checkpoint_forward(x, **kwargs)
 		else:
+			print("forward w/o checkpointing....")
 			for module in self.model:
 				x = module(x, **kwargs)
 		return x
@@ -125,6 +136,7 @@ class GPTStageFirst(GPTStageBase):
 		super(GPTStageFirst, self).__init__(args, config)
 		self.device = device
 		self.model = nn.Sequential().to(device)
+		self.recompute_activations = args.recompute_activations
 		#
 		layer = self._create_first_layer(device)
 		self.model.append(layer)
@@ -133,9 +145,21 @@ class GPTStageFirst(GPTStageBase):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
 			self.model.append(layer)
 
+	def _checkpoint_forward(self, x, **kwargs):
+		def model_forward(x_, **kwargs):
+			for module in self.model:
+				x_ = module(x_, **kwargs)
+			return x_
+		logits = checkpoint(model_forward, x, **kwargs)
+		return logits
+
 	def forward(self, x, **kwargs):
-		for module in self.model:
-			x = module(x, **kwargs)
+		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
+		if not ignore_checkpoint and self.args.recompute_activations:
+			x = self._checkpoint_forward(x, **kwargs)
+		else:
+			for module in self.model:
+				x = module(x, **kwargs)
 		return x
 
 
@@ -144,13 +168,26 @@ class GPTStageMiddle(GPTStageBase):
 		super(GPTStageMiddle, self).__init__(args, config)
 		self.device = device
 		self.model = nn.Sequential().to(device)
+		self.recompute_activations = args.recompute_activations
 		for layer_idx in range(self._layer_begin, self._layer_end):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
 			self.model.append(layer)
 
+	def _checkpoint_forward(self, x, **kwargs):
+		def model_forward(x_, **kwargs):
+			for module in self.model:
+				x_ = module(x_, **kwargs)
+			return x_
+		logits = checkpoint(model_forward, x, **kwargs)
+		return logits
+
 	def forward(self, x, **kwargs):
-		for module in self.model:
-			x = module(x, **kwargs)
+		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
+		if not ignore_checkpoint and self.args.recompute_activations:
+			x = self._checkpoint_forward(x, **kwargs)
+		else:
+			for module in self.model:
+				x = module(x, **kwargs)
 		return x
 
 
@@ -158,6 +195,7 @@ class GPTStageLast(GPTStageBase):
 	def __init__(self, args, config, device):
 		super(GPTStageLast, self).__init__(args, config)
 		self.device = device
+		self.recompute_activations = args.recompute_activations
 		self.model = nn.Sequential().to(device)
 		for layer_idx in range(self._layer_begin, self._layer_end):
 			layer = self._create_transformer_layer(device, layer_idx=layer_idx)
@@ -169,8 +207,20 @@ class GPTStageLast(GPTStageBase):
 			layer = self._create_last_layer(device)
 			self.model.append(layer)
 
+	def _checkpoint_forward(self, x, **kwargs):
+		def model_forward(x_, **kwargs):
+			for module in self.model:
+				x_ = module(x_, **kwargs)
+			return x_
+		logits = checkpoint(model_forward, x, **kwargs)
+		return logits
+
 	def forward(self, x, **kwargs):
-		for module in self.model:
-			x = module(x, **kwargs)
+		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
+		if not ignore_checkpoint and self.args.recompute_activations:
+			x = self._checkpoint_forward(x, **kwargs)
+		else:
+			for module in self.model:
+				x = module(x, **kwargs)
 
 		return x

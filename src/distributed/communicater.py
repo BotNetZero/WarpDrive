@@ -300,7 +300,7 @@ def exception_handler(func):
     return wrapper
 
 
-# broadcast_multigpu will be deprecated: 
+# broadcast_multigpu will be deprecated:
 #     https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions
 
 
@@ -341,7 +341,7 @@ def broadcast(tensor: torch.Tensor, group: Group, src: int, async_op: bool=False
         work.wait()
 
 
-# all_reduce_multigpu will be deprecated: 
+# all_reduce_multigpu will be deprecated:
 #     https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions
 
 
@@ -675,7 +675,7 @@ def all_gather_object(object_list: List[Any], obj: Any, group: Group):
 
 
 @exception_handler
-def gather(tensor: torch.Tensor, group: Group, gather_list: list[torch.Tensor]=None, dst: int=0, async_op=False):
+def gather(tensor: torch.Tensor, group: Group, gather_list=None, dst: int=0, async_op=False):
     """
     Gathers a list of tensors in a single process.
 
@@ -1834,9 +1834,9 @@ def get_group_rank(group: Group, rank: int) -> int:
     """
     if group is None or not _group_manager.exist_group(group):
         raise RuntimeError(f"Invalid group specified: {group}")
-    
+
     group_rank = group.rank_map[rank]
     if group_rank is None:
         raise RuntimeError(f"Invalid rank {rank} for group {group.name}")
-    
+
     return group_rank

@@ -21,7 +21,7 @@
    "optimizer": "Adam",
    "lr": 0.00012,
    "betas": [0.9, 0.95],
-   "eps": 1.0e-8
+   "eps": 1.0e-8,
 
    "min_lr": 0.000012,
 
@@ -33,7 +33,7 @@
     "reduce_scatter": true,
     "reduce_bucket_size": 1260000000,
     "contiguous_gradients": true,
-    "cpu_offload": false
+    "cpu_offload": false,
   },
 
    "train_micro_batch_size_per_gpu": 8,
@@ -57,7 +57,7 @@
    "loss_scale_window": 1000,
    "initial_scale_power": 12,
    "hysteresis": 2,
-   "min_loss_scale": 1
+   "min_loss_scale": 1,
 
    "train_iters": 143000,
    "lr_decay_iters": 143000,
@@ -73,5 +73,5 @@
    "steps_per_print": 10,
    "wall_clock_breakdown": true,
 
-   "tokenizer_type": "HFTokenizer"
+   "tokenizer_type": "HFTokenizer",
 }

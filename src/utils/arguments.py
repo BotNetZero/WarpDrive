@@ -125,7 +125,7 @@ def _add_training_args(parser):
 						' (1024 - 16) / 8 = 126 intervals will increase'
 						'the batch size linearly to 1024. In each interval'
 						'we will use approximately 300000 / 126 = 2380 samples.')
-	parser.add_argument('--recompute_activations', action='store_true',
+	parser.add_argument('--recompute_activations', action='store_true', default=True,
 						help='recompute activation to allow for training '
 						'with larger models, sequences, and batch sizes.')
 	parser.add_argument('--recompute_granularity', type=str, default=None,
