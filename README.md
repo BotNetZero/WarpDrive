@@ -15,7 +15,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: sequence pipeline schedule
 	- :stop_sign: 1f1b, interleave schedule
 4. :building_construction: activation recomputation
-	- :building_construction: full mode
+	- :white_check_mark: full mode
 	- :stop_sign: selective mode
 5. :stop_sign: data parallel
 6. :stop_sign: tensor parallel

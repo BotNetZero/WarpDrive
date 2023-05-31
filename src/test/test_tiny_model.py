@@ -27,6 +27,7 @@ def main():
 	else:
 		device = "cpu"
 	model = GPTStageFull(args, configs, device)
+	
 	# print(model)
 
 	#

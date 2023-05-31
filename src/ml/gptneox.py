@@ -114,21 +114,24 @@ class GPTStageFull(GPTStageBase):
 		"""
 		"""
 		def model_forward(x_, **kwargs):
-			for module in self.model:
+			for module in self.model[1:]:	# exclude embedding layer
 				x_ = module(x_, **kwargs)
 			return x_
 		logits = checkpoint(model_forward, x, **kwargs)
 		return logits
 
 	def forward(self, x, ignore_checkpoint=False, **kwargs):
+		# for activation checkpointing, embedding layer can't no_grad
+		# or computing graph can't be built by autograd
+		hidden = self.model[0](x)		# embedding layer, [batch_size, seq_len, emb_size]
+		#
 		if self.recompute_activations and not ignore_checkpoint:
-			print("forward with checkpointing....")
-			x = self._checkpoint_forward(x, **kwargs)
+			logits = self._checkpoint_forward(hidden, **kwargs)
+			return logits
 		else:
-			print("forward w/o checkpointing....")
-			for module in self.model:
-				x = module(x, **kwargs)
-		return x
+			for module in self.model[1:]:	# exclude embedding layer
+				hidden = module(hidden, **kwargs)
+			return hidden
 
 
 class GPTStageFirst(GPTStageBase):
@@ -147,20 +150,23 @@ class GPTStageFirst(GPTStageBase):
 
 	def _checkpoint_forward(self, x, **kwargs):
 		def model_forward(x_, **kwargs):
-			for module in self.model:
+			for module in self.model[1:]:	# exclude embedding layer
 				x_ = module(x_, **kwargs)
 			return x_
 		logits = checkpoint(model_forward, x, **kwargs)
 		return logits
 
-	def forward(self, x, **kwargs):
-		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
-		if not ignore_checkpoint and self.args.recompute_activations:
-			x = self._checkpoint_forward(x, **kwargs)
+	def forward(self, x, ignore_checkpoint=False, **kwargs):
+		# for activation checkpointing, embedding layer can't no_grad
+		# or computing graph can't be built by autograd
+		hidden = self.model[0](x)			# embedding layer, [batch_size, seq_len, emb_size]
+		if not ignore_checkpoint and self.recompute_activations:
+			logits = self._checkpoint_forward(hidden, **kwargs)
+			return logits
 		else:
-			for module in self.model:
-				x = module(x, **kwargs)
-		return x
+			for module in self.model[1:]:	# exclude embedding layer
+				hidden = module(hidden, **kwargs)
+			return hidden
 
 
 class GPTStageMiddle(GPTStageBase):
@@ -181,9 +187,8 @@ class GPTStageMiddle(GPTStageBase):
 		logits = checkpoint(model_forward, x, **kwargs)
 		return logits
 
-	def forward(self, x, **kwargs):
-		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
-		if not ignore_checkpoint and self.args.recompute_activations:
+	def forward(self, x, ignore_checkpoint=False, **kwargs):
+		if not ignore_checkpoint and self.recompute_activations:
 			x = self._checkpoint_forward(x, **kwargs)
 		else:
 			for module in self.model:
@@ -215,12 +220,10 @@ class GPTStageLast(GPTStageBase):
 		logits = checkpoint(model_forward, x, **kwargs)
 		return logits
 
-	def forward(self, x, **kwargs):
-		ignore_checkpoint = kwargs.get("ignore_checkpoint", False)
-		if not ignore_checkpoint and self.args.recompute_activations:
+	def forward(self, x, ignore_checkpoint=False, **kwargs):
+		if not ignore_checkpoint and self.recompute_activations:
 			x = self._checkpoint_forward(x, **kwargs)
 		else:
 			for module in self.model:
 				x = module(x, **kwargs)
-
 		return x
