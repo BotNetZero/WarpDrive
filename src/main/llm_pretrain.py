@@ -51,9 +51,9 @@ def get_optimizer(args, configs, model, device):
 	tmp_optimizer = create_optimizer(
 		model, optimizer_type=getattr(args, 'optimizer', 'adamw'), learning_rate=learning_rate)
 	optimizer = get_fp16_optimizer(args, tmp_optimizer, device)
-	scheduler = get_linear_schedule_with_warmup(tmp_optimizer, args.warmup_steps, args.total_steps)
+	lr_scheduler = get_linear_schedule_with_warmup(tmp_optimizer, args.warmup_steps, args.total_steps)
 
-	return optimizer, scheduler
+	return optimizer, lr_scheduler
 
 
 def pretrain():
@@ -73,11 +73,11 @@ def pretrain():
 
 	model = get_model(args, configs, device)
 	train_dataloader = get_train_data_loader(args, tokenizer)
-	optimizer, scheduler = get_optimizer(args, configs, model, device)
+	optimizer, lr_scheduler = get_optimizer(args, configs, model, device)
 	optimizer.reload_model_params()
 
 	# traing & eval
-	trainer = Trainer(args, configs, device, model, optimizer, scheduler)
+	trainer = Trainer(args, configs, device, model, optimizer, lr_scheduler)
 	# evaluater = Evaluator()
 
 	#
@@ -85,21 +85,23 @@ def pretrain():
 
 	stop_flag = torch.zeros(1, dtype=torch.int32).to(device)					# barrier flag
 	input_ids = torch.zeros(													# recv from master rank
-		args.batch_size, args.seq_length, dtype=torch.int32, device=device		#
+		args.batch_size, args.seq_length, dtype=torch.long, device=device		#
 	)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
 	data_stream = cuda.Stream(device)	# stream for data broadcast
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
-		for i, global_batch_X in enumerate(train_dataloader, 1):
+		for _, global_batch_X in enumerate(train_dataloader, 1):		# master rank加载所有训练数据
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
 			if stop_flag.item() == 1:
+				print("finished training, then stop....")
 				break
 
 			global_input_ids = global_batch_X["input_ids"]				#
 
-			# input_ids_list = global_input_ids.chunk()						# # TODO: 分发数据做data parallel
-			input_ids = global_input_ids.to(device)							# 当前rank的数据
+			# input_ids_list = global_input_ids.chunk(dp_size)				# # TODO: 分发数据做data parallel
+			input_ids = global_input_ids.to(device)							# master rank的数据
+			print("broadcast input ids:", input_ids)
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# input_ids在last stage用作label数据
 
 			# one training step
@@ -110,7 +112,7 @@ def pretrain():
 			# 	evaluator()
 
 			#
-			if trainer.global_steps > args.total_steps:
+			if trainer.global_step > args.total_steps:
 				stop_flag.data[:] = 1
 
 	# last stage
@@ -118,9 +120,12 @@ def pretrain():
 		while True:
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
 			if stop_flag.item() == 1:
+				print("finished training, then stop....")
 				break
+
 			# 接收input_ids
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)
+			print("broadcast input ids:", input_ids)
 			labels = input_ids.clone()
 
 			# one training step
@@ -135,9 +140,11 @@ def pretrain():
 		while True:
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
 			if stop_flag.item() == 1:
+				print("finished training, then stop....")
 				break
 			# 接收input_ids, middle stage不需要
 			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# TODO: 改进communicator, 在subgroup中做broadcast
+			print("broadcast input ids:", input_ids)
 
 			# one training step
 			trainer(None, None)				# middle stage从prev rank接收数据，向next rank发送数据

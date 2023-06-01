@@ -178,9 +178,9 @@ class GPTEmbeddings(nn.Module):
 
 	def forward(self, input_ids, *args, **kargs):
 		# input ids
-		input_shape = input_ids.size()
-		input_ids = input_ids.view(-1, input_shape[-1])
-		hidden_states = self.embed_in(input_ids)
+		input_shape = input_ids.size()						# [batch_size, seq_len]
+		input_ids = input_ids.view(-1, input_shape[-1])		#
+		hidden_states = self.embed_in(input_ids)			# [batch_size, seq_len, embed_dim]
 		return hidden_states
 
 
@@ -288,6 +288,6 @@ class GPTLMHead(nn.Module):
 		return module
 
 	def forward(self, x, *args, **kargs):
-		x = self.final_layer_norm(x)
-		x = self.embed_out(x)
+		x = self.final_layer_norm(x)	# [batch_size, seq_len, hidden_size]
+		x = self.embed_out(x)			# [batch_size, seq_len, vocab_size]
 		return x

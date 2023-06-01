@@ -125,7 +125,7 @@ def _add_training_args(parser):
 						' (1024 - 16) / 8 = 126 intervals will increase'
 						'the batch size linearly to 1024. In each interval'
 						'we will use approximately 300000 / 126 = 2380 samples.')
-	parser.add_argument('--recompute_activations', action='store_true', default=True,
+	parser.add_argument('--recompute_activations', action='store_true',
 						help='recompute activation to allow for training '
 						'with larger models, sequences, and batch sizes.')
 	parser.add_argument('--recompute_granularity', type=str, default=None,
@@ -140,20 +140,6 @@ def _add_training_args(parser):
 						action='store_true',
 						help='If set, distribute recomputed activations '
 						'across model parallel group.')
-	parser.add_argument('--recompute-method', type=str, default=None,
-						choices=['uniform', 'block'],
-						help='1) uniform: uniformly divide the total number of '
-						'Transformer layers and recompute the input activation of '
-						'each divided chunk at specified granularity, '
-						'2) recompute the input activations of only a set number of '
-						'individual Transformer layers per pipeline stage and do the '
-						'rest without any recomputing at specified granularity'
-						'default) do not apply activations recompute to any layers')
-	parser.add_argument('--recompute-num-layers', type=int, default=1,
-						help='1) uniform: the number of Transformer layers in each '
-						'uniformly divided recompute unit, '
-						'2) block: the number of individual Transformer layers '
-						'to recompute within each pipeline stage.')
 	parser.add_argument("--warmup_steps", type=int, default=10,
 		     			help="warmup period for LRScheduler (default: 10)")
 	parser.add_argument("--total_steps", type=int, default=10000,

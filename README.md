@@ -69,6 +69,10 @@ dp_size*tp_size = max(gpus)
 ppg: [(0,1,4), (0,2,5), (0,3,6)]
 dpg: [(1,2,3), (4,5,6)]
 ```
+## run
+1. training
+> bash scripts/pretrain_pythia7B.sh
+
 
 ## Concept
 1. process group

@@ -18,6 +18,7 @@ from src.distributed.comm_utils import (
 from src.utils.conversion import normalize_precision
 from src.parallel.schedule import SequenceSchedule
 
+
 class Trainer:
 	"""
 	按照rank所处stage实现training的功能:
@@ -25,13 +26,13 @@ class Trainer:
 	2/ forward step
 	3/ backward step
 	"""
-	def __init__(self, args, configs, device, model, optimizer, scheduler) -> None:
+	def __init__(self, args, configs, device, model, optimizer, lr_scheduler) -> None:
 		"""
 		:param args:
 		:param device: current device
 		:param model:
 		:param optimizer:
-		:param scheduler: LR scheduler for optimizer
+		:param lr_scheduler: LR scheduler for optimizer
 		"""
 		self.args = args
 		self.configs = configs
@@ -39,7 +40,7 @@ class Trainer:
 		self.dtype = normalize_precision(configs.torch_dtype)
 		self.model = model
 		self.optimizer = optimizer
-		self.scheduler = scheduler
+		self.lr_scheduler = lr_scheduler
 		self.loss_fn = nn.CrossEntropyLoss()
 		self.comm = get_main_group_comm()		# dist. communicator
 		#
@@ -63,7 +64,7 @@ class Trainer:
 			]
 		# last stage
 		elif self.pp_rank == self.pp_world_size-1:
-			self.input_micro_batches = [			# input tensor from previous rank
+			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
@@ -72,7 +73,7 @@ class Trainer:
 			self.output_micro_batches_grad = None	#
 		# middle stage
 		else:
-			self.input_micro_batches = [			# input tensor from previous rank
+			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
@@ -91,7 +92,8 @@ class Trainer:
 
 	def zero_input_grad(self):
 		"""
-		input_micro_batches的参数没有在optimizer中 手动清零
+		stage 1:N model的input tensor做grad清零
+		因为各staged model的input tensor不在optimzier中, 需要手动清零
 		"""
 		if self.input_micro_batches:
 			for input_micro_batch in self.input_micro_batches:
@@ -129,6 +131,7 @@ class Trainer:
 
 		# schedule
 		for action, micro_batch_idx in self.scheduler:
+			print("in rank [{self.pp_rank}], current action: {action}_{micro_batch_idx}")
 			if action == "wait":
 				continue
 			elif action == "fw":
@@ -144,14 +147,13 @@ class Trainer:
 
 		# all reduce
 		self.optimizer.step()
-		self.scheduler.step()
+		self.lr_scheduler.step()
 
 	def _forward_step(self, micro_batch_idx):
 		"""
 		1/ recev input
 		2/ forward pass
 		3/ send output
-		:param input_ids:
 		"""
 		if self.pp_rank == 0:		# first stage
 			# step1: None

@@ -36,6 +36,8 @@ args="--group_name usr \
 --tensor_group_size 1 \
 --local_rank ${local_rank} \
 --cuda_id ${cuda_id}
+--recompute_activations \
+--num_layers 10
 "
 
 echo "args: "${args}
