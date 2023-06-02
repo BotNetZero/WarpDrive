@@ -6,6 +6,7 @@ Description   : trainer
 """
 import torch
 import torch.nn as nn
+import torch.functional as F
 import torch.cuda as cuda
 from src.common.logger import logger
 from src.distributed.comm_utils import (
@@ -17,6 +18,24 @@ from src.distributed.comm_utils import (
 )
 from src.utils.conversion import normalize_precision
 from src.parallel.schedule import SequenceSchedule
+
+
+def loss_func(logits, targets):
+	"""
+	prev token ==> next token
+
+	:param logits: lm_head outputs
+	:param targets:
+	"""
+	shift_logits = logits[..., :-1, :].contiguous()		# prev tokens' logits: [batch_size, seq_len, vocab_size]
+	shift_labels = targets[..., 1:].contiguous()		# next tokens label id: [batch_size, seq_len]
+
+	unfold_logits = shift_logits.view(-1, shift_logits.size(-1)) 	# [batch_size*seq_len, vocab_size]
+	unfold_labels = shift_labels.view(-1)							# target: [batch_size*seq_len]
+	#
+	loss = F.cross_entropy(unfold_logits, unfold_labels)
+
+	return loss
 
 
 class Trainer:
@@ -41,7 +60,6 @@ class Trainer:
 		self.model = model
 		self.optimizer = optimizer
 		self.lr_scheduler = lr_scheduler
-		self.loss_fn = nn.CrossEntropyLoss()
 		self.comm = get_main_group_comm()		# dist. communicator
 		#
 		self.compute_stream = cuda.default_stream(device)	#
@@ -193,7 +211,7 @@ class Trainer:
 		if self.pp_rank == self.pp_world_size-1:	# last stage
 			with cuda.stream(self.compute_stream):
 				# step1: loss
-				loss = self.loss_fn(pred, target)
+				loss = loss_func(pred, target)
 				# step2: bw
 				self.optimizer.scale(loss).backward()
 			# step 3: send grad

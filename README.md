@@ -32,16 +32,15 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :stop_sign: RLAI
 11. :stop_sign: llm evaluation
 12. :building_construction: model compression
-	- :white_check_mark: empty model init, device map, partial loading
-	- :white_check_mark: fp16
-	- :stop_sign: int8
+	- :white_check_mark: empty model init, device map, sequntial loading
+	- :building_construction: quantization
+		- :building_construction: Quatization Aware Traing (:white_check_mark:fp16, :stop_sign:int8)
+		- :stop_sign: post-training quantization
 	- :stop_sign: pruning
-	- :stop_sign: LoRa, QLoRa
-13. :building_construction: optimizer
-	- :white_check_mark: mixed precision
-	- :white_check_mark: loss scaler
-	- :white_check_mark: lr scheduler
-	- :building_construction: bug fixme
+
+13. :stop_sign: Adapter
+	- :stop_sign: Lora, QLoRa
+
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size
@@ -103,8 +102,12 @@ dpg: [(1,2,3), (4,5,6)]
 
 
 4. Quantization
-- post-training quantization
-- mixed precision training: optimizer, weights, buffers, actiovations...
+- post-training quantization: weights, buffers
+- quantization aware trainging: weights, buffers, actiovations, grads
+
+**fp16 optimizer**: 
+![avatar](./docs/imgs/mixed_precision_training.jpg)
+
 
 
 ## training data

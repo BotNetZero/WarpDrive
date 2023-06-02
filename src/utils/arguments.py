@@ -147,9 +147,7 @@ def _add_training_args(parser):
 	parser.add_argument('--evaluation_steps', type=int, default=0, metavar='S',
                         help='every x steps, do evaluation. (0 means do not do evaluation)')
 
-
-# def _add_mixed_precision_args(parser):
-
+	# mixed precision
 	# parser.add_argument('--fp32-residual-connection', action='store_true',
 	# 					help='Move residual connections to fp32.')
 	# parser.add_argument('--no-query-key-layer-scaling', action='store_false',
