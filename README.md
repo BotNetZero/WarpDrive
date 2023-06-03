@@ -33,12 +33,15 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 11. :stop_sign: llm evaluation
 12. :building_construction: model compression
 	- :white_check_mark: empty model init, device map, sequntial loading
-	- :building_construction: quantization
-		- :building_construction: Quatization Aware Traing (:white_check_mark:fp16, :stop_sign:int8)
-		- :stop_sign: post-training quantization
+	- :building_construction: mixed precision training
+		- :white_check_mark: fp16
+		- :building_construction: bf16
+	- :stop_sign: post-training quantization
 	- :stop_sign: pruning
+13. :building_construction: optimizer
+	- :building_construction: 8-bit Adam
 
-13. :stop_sign: Adapter
+14. :stop_sign: Adapter
 	- :stop_sign: Lora, QLoRa
 
 
@@ -104,9 +107,13 @@ dpg: [(1,2,3), (4,5,6)]
 4. Quantization
 - post-training quantization: weights, buffers
 - quantization aware trainging: weights, buffers, actiovations, grads
+- quantized optimizer: int8 optimzier states
 
-**fp16 optimizer**: 
+**mixed precision training**: 
 ![avatar](./docs/imgs/mixed_precision_training.jpg)
+
+
+Mixed precision primarily benefits Tensor Core-enabled architectures (Volta, Turing, Ampere). 
 
 
 
