@@ -33,10 +33,10 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 11. :stop_sign: llm evaluation
 12. :building_construction: model compression
 	- :white_check_mark: empty model init, device map, sequntial loading
-	- :building_construction: mixed precision training
-		- :white_check_mark: fp16
-		- :building_construction: bf16
-	- :stop_sign: post-training quantization
+	- :white_check_mark: mixed precision training
+		- :white_check_mark: fp16 (GPU), loss scale
+		- :white_check_mark: bf16 (CPU, GPU), no loss scale
+	- :building_construction: quantization
 	- :stop_sign: pruning
 13. :building_construction: optimizer
 	- :building_construction: 8-bit Adam
@@ -104,16 +104,19 @@ dpg: [(1,2,3), (4,5,6)]
 - learning rate schedule:
 
 
-4. Quantization
-- post-training quantization: weights, buffers
-- quantization aware trainging: weights, buffers, actiovations, grads
-- quantized optimizer: int8 optimzier states
+4. mixed precision training: 
+	- lower precision: fp32 --> fp16, bf16
+	- scale loss: for fp16
+	- quantized optimizer: int8 optimzier states
 
 **mixed precision training**: 
 ![avatar](./docs/imgs/mixed_precision_training.jpg)
 
-
 Mixed precision primarily benefits Tensor Core-enabled architectures (Volta, Turing, Ampere). 
+
+5. Quantization
+- post-training quantization: weights, buffers
+- quantization aware trainging: weights, buffers, actiovations
 
 
 

@@ -12,8 +12,9 @@ from src.utils.file import read_yaml_file
 def parse_args():
 	parser = argparse.ArgumentParser(description='Warp Drive training engine')
 	_add_distributed_arguments(parser)
-	_model_arguments(parser)
+	_add_model_arguments(parser)
 	_add_training_args(parser)
+	_add_optimizer_args(parser)
 
 	args = parser.parse_args()
 
@@ -72,14 +73,11 @@ def _add_distributed_arguments(parser):
 						help='cuda indx, indicating which rank owns. (default: 0)')
 
 
-def _model_arguments(parser):
+def _add_model_arguments(parser):
 	parser.add_argument('--model_name', type=str, default='pythia_7b', metavar='S',
 						help='model name in lowercase (default: pythia_7b)')
 	parser.add_argument("--training_mode", type=str, default="pretrain", choices=["train", "pretrain"],
 						help="training mode: train from scratch, retrain (default: pretrain)")
-	parser.add_argument('--optimizer', type=str, default='adamw',
-					choices=['adam', 'sgd', "adamw"],
-					help='Optimizer function name in lowercase (default: AdamW)')
 	parser.add_argument("--precision", type=str, default="fp16", choices=["fp32", "fp16", "bf16", "int8"],
 		     			help="model parameters precision (default: fp16)")
 	parser.add_argument('--loss_scale', type=float, default=None,
@@ -146,6 +144,12 @@ def _add_training_args(parser):
 		     			help="total training steps (default: 10000)")
 	parser.add_argument('--evaluation_steps', type=int, default=0, metavar='S',
                         help='every x steps, do evaluation. (0 means do not do evaluation)')
+
+def _add_optimizer_args(parser):
+	parser.add_argument('--optimizer', type=str, default='adamw',
+				choices=['adam', 'sgd', "adamw", "8bit-adam"],
+				help='Optimizer function name in lowercase (default: AdamW)')
+
 
 	# mixed precision
 	# parser.add_argument('--fp32-residual-connection', action='store_true',

@@ -31,7 +31,7 @@ if torch.cuda.is_available():
 	dtype = torch.float16
 else:
 	device = "cpu"
-	dtype = torch.float
+	dtype = torch.bfloat16
 print(device)
 
 
