@@ -105,14 +105,16 @@ dpg: [(1,2,3), (4,5,6)]
 
 
 4. mixed precision training: 
-	- lower precision: fp32 --> fp16, bf16
+	- lower precision: fp32 --> fp16(gpu), bf16(cpu, gpu)
 	- scale loss: for fp16
 	- quantized optimizer: int8 optimzier states
 
 **mixed precision training**: 
 ![avatar](./docs/imgs/mixed_precision_training.jpg)
 
-Mixed precision primarily benefits Tensor Core-enabled architectures (Volta, Turing, Ampere). 
+> Mixed precision primarily benefits Tensor Core-enabled architectures (Volta, Turing, Ampere). 
+> torch.autocast automatically chooses the precision for GPU operations to improve performance while maintaining accuracy.
+
 
 5. Quantization
 - post-training quantization: weights, buffers

@@ -39,12 +39,14 @@ class Communicator:
 		:param sub_pg:
 		"""
 		with cuda.stream(send_stream):
-			send_stream.wait_stream(wait_stream)
+			if wait_stream is not None:
+				send_stream.wait_stream(wait_stream)
 			dist.send(tensor, dst_rank, sub_pg)
 
 	def recv(self, recv_stream, tensor, src_rank, wait_stream, sub_pg):
 		with cuda.stream(recv_stream):
-			recv_stream.wait_stream(wait_stream)
+			if wait_stream is not None:
+				recv_stream.wait_stream(wait_stream)
 			dist.recv(tensor, src_rank, sub_pg)
 
 	def broadcast(self, collective_stream, tensor, src_rank, wait_stream, sub_pg):

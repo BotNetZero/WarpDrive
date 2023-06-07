@@ -80,25 +80,11 @@ def _add_model_arguments(parser):
 						help="training mode: train from scratch, retrain (default: pretrain)")
 	parser.add_argument("--precision", type=str, default="fp16", choices=["fp32", "fp16", "bf16", "int8"],
 		     			help="model parameters precision (default: fp16)")
-	parser.add_argument('--loss_scale', type=float, default=None,
-                       help='Static loss scaling, positive power of 2 '
-                       'values can improve fp16 convergence. If None, dynamic'
-                       'loss scaling is used.')
-	parser.add_argument('--initial_loss_scale', type=float, default=2**32,
-						help='Initial loss-scale for dynamic loss scaling.')
-	parser.add_argument('--min_loss_scale', type=float, default=1.0,
-						help='Minimum loss scale for dynamic loss scale.')
-	parser.add_argument('--loss_scale_window', type=float, default=1000,
-						help='Window over which to raise/lower dynamic scale.')
-	parser.add_argument('--hysteresis', type=int, default=2,
-						help='hysteresis for dynamic loss scaling')
 	parser.add_argument("--num_layers", type=int,
 		     			help="number of model layers at current stage")
 	parser.add_argument('--seed', type=int, default=1234,
 					help='Random seed used for python, numpy, '
 					'pytorch, and cuda.')
-	parser.add_argument('--lr', type=float, default=0.01, metavar='N',
-                        help='learning rate ')
 
 
 def _add_training_args(parser):
@@ -149,7 +135,12 @@ def _add_optimizer_args(parser):
 	parser.add_argument('--optimizer', type=str, default='adamw',
 				choices=['adam', 'sgd', "adamw", "8bit-adam"],
 				help='Optimizer function name in lowercase (default: AdamW)')
-
+	parser.add_argument('--initial_scale', type=float, default=2**16,
+						help='Initial loss-scale for dynamic loss scaling.')
+	parser.add_argument('--growth_interval', type=float, default=2000,
+						help='Window over which to raise/lower dynamic scale.')
+	parser.add_argument('--lr', type=float, default=0.01, metavar='N',
+                        help='learning rate ')
 
 	# mixed precision
 	# parser.add_argument('--fp32-residual-connection', action='store_true',

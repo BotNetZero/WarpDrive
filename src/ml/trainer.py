@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.functional as F
 import torch.cuda as cuda
+from torch.amp.autocast_mode import autocast
 from src.common.logger import logger
 from src.distributed.comm_utils import (
 	get_main_group_comm,
@@ -45,13 +46,14 @@ class Trainer:
 	2/ forward step
 	3/ backward step
 	"""
-	def __init__(self, args, configs, device, model, optimizer, lr_scheduler) -> None:
+	def __init__(self, args, configs, device, model, optimizer, lr_scheduler, grad_scaler) -> None:
 		"""
 		:param args:
 		:param device: current device
 		:param model:
 		:param optimizer:
 		:param lr_scheduler: LR scheduler for optimizer
+		:param grad_scaler:
 		"""
 		self.args = args
 		self.configs = configs
@@ -59,7 +61,8 @@ class Trainer:
 		self.dtype = normalize_precision(configs.torch_dtype)
 		self.model = model
 		self.optimizer = optimizer
-		self.lr_scheduler = lr_scheduler
+		self.lr_scheduler = lr_scheduler		#
+		self.grad_scaler = grad_scaler			#
 		self.comm = get_main_group_comm()		# dist. communicator
 		#
 		self.compute_stream = cuda.default_stream(device)	#
@@ -164,8 +167,9 @@ class Trainer:
 			# TODO: synchronize
 
 		# all reduce
-		self.optimizer.step()
+		self.grad_scaler.step(self.optimizer)
 		self.lr_scheduler.step()
+		self.grad_scaler.update()
 
 	def _forward_step(self, micro_batch_idx):
 		"""
@@ -177,7 +181,8 @@ class Trainer:
 			# step1: None
 			# step2: fw
 			with cuda.stream(self.compute_stream):
-				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+				with autocast(device_type="cuda", dtype=self.dtype):
+					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: send
 			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
 
@@ -187,7 +192,8 @@ class Trainer:
 			# step2: fw
 			with cuda.stream(self.compute_stream):
 				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+				with autocast(device_type="cuda", dtype=self.dtype):
+					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: None
 
 		else:	# middle stage
@@ -196,7 +202,8 @@ class Trainer:
 			# step2: fw
 			with cuda.stream(self.compute_stream):
 				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+				with autocast(device_type="cuda", dtype=self.dtype):
+					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: send
 			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
 
@@ -210,10 +217,11 @@ class Trainer:
 		"""
 		if self.pp_rank == self.pp_world_size-1:	# last stage
 			with cuda.stream(self.compute_stream):
-				# step1: loss
-				loss = loss_func(pred, target)
+				# step1: loss, fp32
+				with autocast(device_type="cuda", dtype=self.dtype):
+					loss = loss_func(pred, target)
 				# step2: bw
-				self.optimizer.scale(loss).backward()
+				self.grad_scaler.scale(loss).backward()
 			# step 3: send grad
 			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
 

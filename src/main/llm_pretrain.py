@@ -10,6 +10,7 @@ sys.path.append(os.getcwd())
 import traceback
 import torch
 import torch.cuda as cuda
+from torch.cuda.amp.grad_scaler import GradScaler
 from transformers import get_linear_schedule_with_warmup
 from src.utils.arguments import parse_args
 from src.distributed.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
@@ -19,7 +20,7 @@ from src.common.constants import MODEL_PATH
 from src.ml.tokenizer import Tokenizer
 from src.ml.trainer import Trainer, Evaluator
 from src.ml.gptneox import GPTStageFirst, GPTStageLast, GPTStageMiddle, GPTStageFull
-from src.optimization.optimizer import create_optimizer, get_fp16_optimizer
+from src.ml.optimizer import create_optimizer
 
 pp_rank = get_pp_group_rank()
 pp_world_size = get_pp_world_size()
@@ -48,12 +49,17 @@ def get_optimizer(args, configs, model, device):
 	else:
 		learning_rate = args.lr
 	#
-	tmp_optimizer = create_optimizer(
+	optimizer = create_optimizer(
 		model, optimizer_type=getattr(args, 'optimizer', 'adamw'), learning_rate=learning_rate)
-	optimizer = get_fp16_optimizer(args, tmp_optimizer, device)
-	lr_scheduler = get_linear_schedule_with_warmup(tmp_optimizer, args.warmup_steps, args.total_steps)
 
-	return optimizer, lr_scheduler
+	lr_scheduler = get_linear_schedule_with_warmup(optimizer, args.warmup_steps, args.total_steps)
+
+	grad_scaler = GradScaler(
+		init_scale=args.initial_scale,
+		growth_interval=args.growth_interval,
+	)
+
+	return optimizer, lr_scheduler, grad_scaler
 
 
 def pretrain():
@@ -73,11 +79,10 @@ def pretrain():
 
 	model = get_model(args, configs, device)
 	train_dataloader = get_train_data_loader(args, tokenizer)
-	optimizer, lr_scheduler = get_optimizer(args, configs, model, device)
-	optimizer.reload_model_params()
+	optimizer, lr_scheduler, grad_scaler = get_optimizer(args, configs, model, device)
 
 	# traing & eval
-	trainer = Trainer(args, configs, device, model, optimizer, lr_scheduler)
+	trainer = Trainer(args, configs, device, model, optimizer, lr_scheduler, grad_scaler)
 	# evaluater = Evaluator()
 
 	#
