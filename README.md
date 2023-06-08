@@ -5,11 +5,12 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 1. :building_construction: topology:
 	- :white_check_mark: cluster mode
 	- :building_construction: CS mode
-2. :white_check_mark: distributed communication (optimize c10d)
+2. :building_construction: distributed communication (optimize c10d)
 	- :white_check_mark: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm
 	- :white_check_mark: collective comm
+	- :building_construction: stream sync
 3. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
 	- :white_check_mark: sequence pipeline schedule
@@ -44,6 +45,8 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 14. :stop_sign: Adapter
 	- :stop_sign: Lora, QLoRa
 
+15. :building_construction: logs for training error debug 
+	
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size

@@ -32,10 +32,7 @@ def parse_args():
 		raise ValueError(f"pipeline_group_size [{args.pipeline_group_size}] should be larger than 2")
 
 	args.seq_length = configs.seq_length
-	if args.global_batch_size is None:
-		args.global_batch_size = args.batch_size * args.data_group_size
-	else:
-		assert args.global_batch_size == args.batch_size * args.data_group_size
+	args.global_batch_size = args.batch_size * args.data_group_size
 
 	if args.batch_size % args.micro_batch_num != 0:
 		raise ValueError(f"specify evenly divisible requirement: batch_size [{args.batch_size}] % micro_batch_num [{args.micro_batch_num}] != 0")
@@ -95,8 +92,6 @@ def _add_training_args(parser):
 						'global_batch_size = batch_size * data_group_size')
 	parser.add_argument("--micro_batch_num", type=int, default=5,
 		     			help="batch chunks for pipeline schedule (default: 5)")
-	parser.add_argument('--global_batch_size', type=int, default=None,
-						help='Training batch size summing all ranks in stage 0')
 	parser.add_argument('--rampup-batch-size', nargs='*', default=None,
 						help='Batch size ramp up with the following values:'
 						'  --rampup-batch-size <start batch size> '

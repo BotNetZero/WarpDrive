@@ -79,7 +79,7 @@ class Trainer:
 			self.input_micro_batches = None			# micro batched input ids
 			self.output_micro_batches_grad = [		# gradients from next stage
 				torch.zeros(
-					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
+					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
 					requires_grad=False, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
@@ -87,7 +87,7 @@ class Trainer:
 		elif self.pp_rank == self.pp_world_size-1:
 			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
-					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
+					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
@@ -96,13 +96,13 @@ class Trainer:
 		else:
 			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
-					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
+					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
 					requires_grad=True, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
 			self.output_micro_batches_grad = [		# gradients from next stage
 				torch.zeros(
-					(self.args.micro_batch_size, self.args.seq_length, self.configs.embedding_size),
+					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
 					requires_grad=False, dtype=self.dtype, device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
@@ -169,7 +169,8 @@ class Trainer:
 		# all reduce
 		self.grad_scaler.step(self.optimizer)
 		self.lr_scheduler.step()
-		self.grad_scaler.update()
+
+		self.grad_scaler.update()	# single rank scaler update
 
 	def _forward_step(self, micro_batch_idx):
 		"""
@@ -220,6 +221,7 @@ class Trainer:
 				# step1: loss, fp32
 				with autocast(device_type="cuda", dtype=self.dtype):
 					loss = loss_func(pred, target)
+					print("loss:", loss.item())
 				# step2: bw
 				self.grad_scaler.scale(loss).backward()
 			# step 3: send grad
@@ -244,7 +246,6 @@ class Trainer:
 			# step3: send grad
 			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
 
-
 	def __call__(self, input_ids, targets):
 		"""
 		steps:
@@ -252,11 +253,12 @@ class Trainer:
 		2/ pipeline schedule
 		3/ training step
 		"""
-		# update loss scale
-		if not self.args.loss_scale:	# dynamic scaler
-			scales_buffer = [torch.ones_like(self.optimizer.grad_scaler._scale) for _ in range(self.args.pipeline_group_size)]
-			self.comm.all_gather(self.optimizer.grad_scaler._scale, scales_buffer)
-			self.optimizer.grad_scaler._scale.data[:] = min([s.item() for s in scales_buffer])
+		# sync scaler: make sure the whold pp group share the same scale
+		if self.pp_world_size > 1:
+			scales_buffer = [torch.ones_like(self.grad_scaler._scale) for _ in range(self.pp_world_size)]
+			self.comm.all_gather(self.grad_scaler._scale, scales_buffer, None, None)	# gather scale
+			new_scale = min([s.item() for s in scales_buffer])				# min
+			self.grad_scaler.update(new_scale)								# sync
 
 		# zero grad
 		self.zero_input_grad()

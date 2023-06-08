@@ -169,8 +169,6 @@ def get_train_data_loader(args, tokenizer, state_dict=None):
 								pin_memory=True,
 								collate_fn=None)
 
-    print('data_utils: get train_data_loader')
-
     return train_data_loader
 
 

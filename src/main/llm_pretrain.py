@@ -22,13 +22,14 @@ from src.ml.trainer import Trainer, Evaluator
 from src.ml.gptneox import GPTStageFirst, GPTStageLast, GPTStageMiddle, GPTStageFull
 from src.ml.optimizer import create_optimizer
 
-pp_rank = get_pp_group_rank()
-pp_world_size = get_pp_world_size()
 
 def get_model(args, configs, device):
 	"""
 	基于rank所处stage创建model
 	"""
+	pp_rank = get_pp_group_rank()
+	pp_world_size = get_pp_world_size()
+
 	if pp_world_size == 1:
 		model = GPTStageFull(args, configs, device)
 	elif pp_rank == 0:
@@ -70,6 +71,9 @@ def pretrain():
 	init_distributed_env(args)
 	comm = get_main_group_comm()
 
+	pp_rank = get_pp_group_rank()
+	pp_world_size = get_pp_world_size()
+
 	device = torch.device(args.cuda_id)
 	cuda.set_device(device)
 
@@ -94,6 +98,7 @@ def pretrain():
 	)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
 	data_stream = cuda.Stream(device)	# stream for data broadcast
+
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
 		for _, global_batch_X in enumerate(train_dataloader, 1):		# master rank加载所有训练数据
@@ -163,6 +168,6 @@ if __name__ == "__main__":
 	try:
 		pretrain()
 	except Exception as exc:
-		print(traceback.print_exc(exc))
+		traceback.print_exc()
 	#
 	destroy_distributed_env()

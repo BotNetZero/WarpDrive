@@ -54,7 +54,7 @@ class TestSchedule:
 
 
 if __name__ == "__main__":
-	scheduler = TestSchedule(pp_rank=0, world_size=3, micro_batch_num=3)
+	scheduler = TestSchedule(pp_rank=0, world_size=1, micro_batch_num=3)
 	for cmd in scheduler:
 		print(cmd)
 

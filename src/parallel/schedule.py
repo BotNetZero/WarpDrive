@@ -86,18 +86,18 @@ class SequenceSchedule(PipeSchedule):
 		if clock < self.pp_rank:
 			return "wait", 0
 		#
-		tmp_clock = clock - self.pp_rank
-		if tmp_clock < self.micro_batch_num:
-			return "fw", tmp_clock
+		local_clock = clock - self.pp_rank			# clock for each rank
+		if local_clock < self.micro_batch_num:
+			return "fw", local_clock
 
 		diff = self.pp_world_size - 1 - self.pp_rank	# diff btw current stage and last stage
-		tmp_clock = clock - self.pp_rank - self.micro_batch_num
-		if tmp_clock < 2*diff:
+		local_clock = clock - self.pp_rank - self.micro_batch_num
+		if local_clock < 2*diff:
 			return "wait", 0
 
-		tmp_clock = clock - self.pp_rank - self.micro_batch_num - 2*diff
-		if tmp_clock < self.micro_batch_num:
-			return "bw", tmp_clock
+		local_clock = clock - self.pp_rank - self.micro_batch_num - 2*diff
+		if local_clock < self.micro_batch_num:
+			return "bw", local_clock
 
 		return "wait", 0
 
