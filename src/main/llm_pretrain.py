@@ -96,23 +96,33 @@ def pretrain():
 	input_ids = torch.zeros(													# recv from master rank
 		args.batch_size, args.seq_length, dtype=torch.long, device=device		#
 	)
+	compute_stream = cuda.default_stream(device)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
 	data_stream = cuda.Stream(device)	# stream for data broadcast
 
+	cuda.synchronize()
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
 		for _, global_batch_X in enumerate(train_dataloader, 1):		# master rank加载所有训练数据
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			stop_stream.synchronize()
+			print("stop_stream state:", stop_stream.query())
+			#
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
-
+			#
 			global_input_ids = global_batch_X["input_ids"]				#
 
 			# input_ids_list = global_input_ids.chunk(dp_size)				# # TODO: 分发数据做data parallel
 			input_ids = global_input_ids.to(device)							# master rank的数据
 			print("broadcast input ids:", input_ids)
-			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# input_ids在last stage用作label数据
+			compute_stream.synchronize()
+			print("compute_stream state:", compute_stream.query())
+			#
+			comm.broadcast(data_stream, input_ids, 0, None, None)	# input_ids在last stage用作label数据
+			data_stream.synchronize()
+			print("data_stream state:", data_stream.query())
 
 			# one training step
 			trainer(input_ids, None)		# first stage向next rank发送数据
@@ -124,11 +134,15 @@ def pretrain():
 			#
 			if trainer.global_step > args.total_steps:
 				stop_flag.data[:] = 1
+			compute_stream.synchronize()
 
 	# last stage
 	elif pp_rank == pp_world_size-1:
 		while True:
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
+			stop_stream.synchronize()
+			print("stop_stream state:", stop_stream.query())
+			#
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
@@ -149,6 +163,9 @@ def pretrain():
 	else:
 		while True:
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
+			stop_stream.synchronize()
+			print("stop_stream state:", stop_stream.query())
+			#
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break

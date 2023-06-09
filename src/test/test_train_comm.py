@@ -31,47 +31,58 @@ def main():
 	brod_stream = cuda.Stream(device)					# stream for broadcast
 	#
 	stop_flag = torch.zeros(1, dtype=torch.int32).to(device)
-	data = torch.zeros(3, 10, dtype=torch.int, device=device)
+	data = torch.zeros(3, 5, dtype=torch.int, device=device)
+	cuda.synchronize()
 	try:
 		if args.global_rank == 0:
+			stop_flag.data[:] = 1
 			for i in range(10):
 				print("epoch:", i)
 				comm.broadcast(brod_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+				brod_stream.synchronize()
+				print("brod_stream state:", brod_stream.query())
 				#
-				with cuda.stream(compute_stream):
-					compute_stream.wait_stream(brod_stream)
-					print("finished broadcast stream...")
-					if stop_flag.item() == 1:
-						print("finished training, then stop....")
-						break
-					data = torch.full((3, 10), i+1, dtype=torch.int, device=device)
-					print("prepare send data:", data)
-				#
-				comm.send(send_stream, data, 1, compute_stream, None)
-				#
-				with cuda.stream(compute_stream):
-					compute_stream.wait_stream(send_stream)
-					print("finished send stream...")
-					if i == 5:
-						print("setting stop flag....")
-						stop_flag.data[:] = 1
+				if stop_flag.item() == 2:
+					print("finished training, then stop....")
+					break
+				data = torch.full((3, 5), i+1, dtype=torch.int, device=device)
+				print("prepare send data:", data)
 				compute_stream.synchronize()
+				print("compute_stream state:", compute_stream.query())
+				#
+				comm.send(send_stream, data, 1, None, None)
+				send_stream.synchronize()
+				print("send_stream state:", send_stream.query())
+				#
+				if i == 5:
+					print("setting stop flag....")
+					stop_flag.data[:] = 2
+				compute_stream.synchronize()
+				print("compute_stream state:", compute_stream.query())
+				print()
 		else:
 			while True:
 				comm.broadcast(brod_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
-				with cuda.stream(compute_stream):
-					compute_stream.wait_stream(brod_stream)
-					print("finished broadcast stream...")
-					if stop_flag.item() == 1:
-						print("finished training, then stop....")
-						break
+				brod_stream.synchronize()
+				print("brod_stream state:", brod_stream.query())
 				#
-				comm.recv(recv_stream, data, 0, compute_stream, None)
-				#
-				with cuda.stream(compute_stream):
-					compute_stream.wait_stream(recv_stream)
-					print("recv data:", data)
+				if stop_flag.item() == 0:
+					print("not receive correct stop_flag....")
+					continue
+				if stop_flag.item() == 2:
+					print("finished training, then stop....")
+					break
 				compute_stream.synchronize()
+				print("compute_stream state:", compute_stream.query())
+				#
+				comm.recv(recv_stream, data, 0, None, None)
+				recv_stream.synchronize()
+				print("recv stream state:", recv_stream.query())
+				print("recv data:", data)
+				#
+				compute_stream.synchronize()
+				print("compute_stream state:", compute_stream.query())
+				print()
 
 	except Exception as exc:
 		traceback.print_exc()

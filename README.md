@@ -119,7 +119,7 @@ dpg: [(1,2,3), (4,5,6)]
 - post-training quantization: weights, buffers
 - quantization aware trainging: weights, buffers, actiovations
 
-6. timeline for CUDA streams
+6. timeline for CUDA streams  
 principles: 
 - default stream for computation, non-default stream for communication across ranks
 - different streams for each micro batch
