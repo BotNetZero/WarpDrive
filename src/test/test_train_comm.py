@@ -55,6 +55,7 @@ def main():
 					if i == 5:
 						print("setting stop flag....")
 						stop_flag.data[:] = 1
+				compute_stream.synchronize()
 		else:
 			while True:
 				comm.broadcast(brod_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
@@ -70,6 +71,7 @@ def main():
 				with cuda.stream(compute_stream):
 					compute_stream.wait_stream(recv_stream)
 					print("recv data:", data)
+				compute_stream.synchronize()
 
 	except Exception as exc:
 		traceback.print_exc()

@@ -10,7 +10,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: fix _store_based_barrier
 	- :white_check_mark: P2P comm
 	- :white_check_mark: collective comm
-	- :building_construction: stream sync
+	- :building_construction: timeline for cuda stream sync
 3. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
 	- :white_check_mark: sequence pipeline schedule
@@ -46,7 +46,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :stop_sign: Lora, QLoRa
 
 15. :building_construction: logs for training error debug 
-	
+16. :stop_sign: compute graph for distributed computing
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size
@@ -84,14 +84,10 @@ dpg: [(1,2,3), (4,5,6)]
 - main group: 区别pytorch.distributed的default pg, 可以有多个main group
 - subgroup: main group可以有多个sub group, pp/dp/tp mode对应不同的subgroup
 
-2. tasks
-- forward computing
-- backward computing
-- send 
-- receive
-- scatter
-- gather
-- reduce
+2. operations
+- model forward, backward
+- activations recomputing
+- communication: p2p, collective comm
 
 通信模式解释
 ![avatar](./docs/imgs/collective_comm.jpg)
@@ -123,6 +119,17 @@ dpg: [(1,2,3), (4,5,6)]
 - post-training quantization: weights, buffers
 - quantization aware trainging: weights, buffers, actiovations
 
+6. timeline for CUDA streams
+principles: 
+- default stream for computation, non-default stream for communication across ranks
+- different streams for each micro batch
+- parallel recomputing and communication
+![avatar](./docs/imgs/timeline.jpg)
+
+7. compute graph
+- define op function: recompute, communication
+- use autograd and CUDA stream to arange ops, micro batches in order
+![avatar](./docs/imgs/compute_graph.jpg)
 
 
 ## training data
