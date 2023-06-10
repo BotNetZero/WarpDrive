@@ -96,64 +96,66 @@ def pretrain():
 	input_ids = torch.zeros(													# recv from master rank
 		args.batch_size, args.seq_length, dtype=torch.long, device=device		#
 	)
-	compute_stream = cuda.default_stream(device)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
 	data_stream = cuda.Stream(device)	# stream for data broadcast
 
-	cuda.synchronize()
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
 		for _, global_batch_X in enumerate(train_dataloader, 1):		# master rank加载所有训练数据
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
-			stop_stream.synchronize()
-			print("stop_stream state:", stop_stream.query())
 			#
+			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over and tensors for comm is ready
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			stop_stream.synchronize()									# make sure comm is finished, and all ranks get the same stop_flag
+
+			# under defult stream
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
 			#
 			global_input_ids = global_batch_X["input_ids"]				#
 
-			# input_ids_list = global_input_ids.chunk(dp_size)				# # TODO: 分发数据做data parallel
-			input_ids = global_input_ids.to(device)							# master rank的数据
+			# input_ids_list = global_input_ids.chunk(dp_size)			# # TODO: 分发数据做data parallel
+			input_ids = global_input_ids.to(device)						# master rank的数据
 			print("broadcast input ids:", input_ids)
-			compute_stream.synchronize()
-			print("compute_stream state:", compute_stream.query())
-			#
-			comm.broadcast(data_stream, input_ids, 0, None, None)	# input_ids在last stage用作label数据
-			data_stream.synchronize()
-			print("data_stream state:", data_stream.query())
 
-			# one training step
-			trainer(input_ids, None)		# first stage向next rank发送数据
+			# broadcast input data under data_stream
+			data_stream.wait_stream(cuda.current_stream())				# make sure tensors for comm is updated
+			comm.broadcast(data_stream, input_ids, 0, None, None)		# input_ids在last stage用作label数据
 
+			# start training while broadcasting...
+			trainer(input_ids, None)									# one training step
+			
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
 			# 	evaluator()
 
-			#
+			# under default stream
 			if trainer.global_step > args.total_steps:
 				stop_flag.data[:] = 1
-			compute_stream.synchronize()
 
 	# last stage
 	elif pp_rank == pp_world_size-1:
 		while True:
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
-			stop_stream.synchronize()
-			print("stop_stream state:", stop_stream.query())
-			#
+			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			stop_stream.synchronize()									# make sure data is received
+
+			# default stream
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
 
-			# 接收input_ids
-			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)
+			# recv input_ids under data_stream
+			data_stream.wait_stream(cuda.current_stream())				# make sure stop_flag is checked
+			comm.broadcast(data_stream, input_ids, 0, None, None)		# recv input_ids
+			data_stream.synchronize()									# make sure comm is finished
+
+			# default stream
 			print("broadcast input ids:", input_ids)
 			labels = input_ids.clone()
 
 			# one training step
-			trainer(None, labels)			# last stage接收prev rank的input数据
+			trainer(None, labels)										# one training step
 
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
@@ -162,24 +164,29 @@ def pretrain():
 	# middle stage
 	else:
 		while True:
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)			# broadcast stop_flag for all ranks
-			stop_stream.synchronize()
-			print("stop_stream state:", stop_stream.query())
-			#
+			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
+			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# recv stop_flag
+			stop_stream.synchronize()									# make sure data is received
+
+			# under default stream
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
-			# 接收input_ids, middle stage不需要
-			comm.broadcast(data_stream, input_ids, 0, stop_stream, None)	# TODO: 改进communicator, 在subgroup中做broadcast
-			print("broadcast input ids:", input_ids)
 
-			# one training step
-			trainer(None, None)				# middle stage从prev rank接收数据，向next rank发送数据
+			# recv input_ids
+			data_stream.wait_stream(cuda.current_stream())				# make sure stop_flag is checked
+			comm.broadcast(data_stream, input_ids, 0, None, None)		# TODO: 改进communicator, 在subgroup中做broadcast
+			# data_stream.synchronize()									# middle stage don't use input_ids, therefore no synchronize...
+
+			# starting training while broadcasting
+			trainer(None, None)											# one training step
 
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
 			# 	evaluator()
 
+	# makesure training is over...
+	cuda.synchronize()
 
 if __name__ == "__main__":
 	try:

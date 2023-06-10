@@ -151,6 +151,7 @@ class Trainer:
 		pred_micro_batches = [None for _ in range(self.args.micro_batch_num)]	# staged model preds
 
 		# schedule
+		# TODO: micro batch under stream control, synchronize at all reduce step
 		for action, micro_batch_idx in self.scheduler:
 			print("in rank [{self.pp_rank}], current action: {action}_{micro_batch_idx}")
 			if action == "wait":
@@ -164,8 +165,8 @@ class Trainer:
 				self._backward_step(micro_batch_idx, pred, target)
 			else:
 				raise ValueError(f"action [{action}] not support YET!!")
-			# TODO: synchronize
-
+			#
+		# 
 		# all reduce
 		self.grad_scaler.step(self.optimizer)
 		self.lr_scheduler.step()
@@ -177,36 +178,56 @@ class Trainer:
 		1/ recev input
 		2/ forward pass
 		3/ send output
+		4/ sync
 		"""
 		if self.pp_rank == 0:		# first stage
 			# step1: None
-			# step2: fw
-			with cuda.stream(self.compute_stream):
-				with autocast(device_type="cuda", dtype=self.dtype):
-					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+			# step2: fw under default stream
+			with autocast(device_type="cuda", dtype=self.dtype):
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+
 			# step3: send
-			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
+			self.send_stream.wait_stream(cuda.current_stream())								# make sure fw is over and tensors for send is ready
+			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, None, None)		# send to next rank
+
+			# step4: sync
+			self.send_stream.synchronize()													# make sure fw and send are over
 
 		elif self.pp_rank == self.pp_world_size-1:	# last stage
 			# step1: recv input
-			self.comm.recv(self.recv_stream, self.input_micro_batches[micro_batch_idx], self.pp_prev_rank, None, None)
-			# step2: fw
-			with cuda.stream(self.compute_stream):
-				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				with autocast(device_type="cuda", dtype=self.dtype):
-					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+			self.recv_stream.wait_stream(cuda.current_stream())								# for safe, synchronize
+			self.comm.recv(																	# recv from prev rank
+				self.recv_stream,
+				self.input_micro_batches[micro_batch_idx],
+				self.pp_prev_rank, None, None)
+			self.recv_stream.synchronize()													# make sure recv is over
+
+			# step2: fw under default stream
+			with autocast(device_type="cuda", dtype=self.dtype):
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
 			# step3: None
+			# step4: sync
+			cuda.current_stream().synchronize()												# make sure fw is over
 
 		else:	# middle stage
 			# step1: recv input
-			self.comm.recv(self.recv_stream, self.input_micro_batches[micro_batch_idx], self.pp_prev_rank, None, None)
-			# step2: fw
-			with cuda.stream(self.compute_stream):
-				self.compute_stream.wait_stream(self.recv_stream)	# synchronize recv
-				with autocast(device_type="cuda", dtype=self.dtype):
-					micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+			self.recv_stream.wait_stream(cuda.current_stream())								# for safe, synchronize
+			self.comm.recv(																	# recv from prev rank
+				self.recv_stream,
+				self.input_micro_batches[micro_batch_idx],
+				self.pp_prev_rank, None, None)
+			self.recv_stream.synchronize()													# make sure recv is over
+
+			# step2: fw under default stream
+			with autocast(device_type="cuda", dtype=self.dtype):
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+
 			# step3: send
-			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, self.compute_stream, None)
+			self.send_stream.wait_stream(cuda.current_stream())								# make sure fw is over
+			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, None, None)		# send to next rank
+
+			# step4: sync
+			self.send_stream.synchronize()													# make sure fw and send are all over
 
 		return micro_pred
 
@@ -215,36 +236,61 @@ class Trainer:
 		1/ calculate loss and scale, or recv grad
 		2/ recompute, bw
 		3/ send grad
+		4/ synchronize
 		"""
 		if self.pp_rank == self.pp_world_size-1:	# last stage
-			with cuda.stream(self.compute_stream):
-				# step1: loss, fp32
-				with autocast(device_type="cuda", dtype=self.dtype):
-					loss = loss_func(pred, target)
-					print("loss:", loss.item())
-				# step2: bw
-				self.grad_scaler.scale(loss).backward()
+			# step1: loss under default stream
+			with autocast(device_type="cuda", dtype=self.dtype):
+				loss = loss_func(pred, target)							# loss.dtype=fp32
+				print("loss:", loss.item())
+
+			# step2: bw under default stream as fw
+			self.grad_scaler.scale(loss).backward()
+
 			# step 3: send grad
-			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
+			self.send_stream.wait_stream(cuda.current_stream())			# make sure bw is over
+			self.comm.send(												# send grads to prev rank
+				self.send_stream,
+				self.input_micro_batches[micro_batch_idx].grad,
+				self.pp_prev_rank, None, None)
+
+			# step4: sync
+			self.send_stream.synchronize()								# make sure one step is over
 
 		elif self.pp_rank == 0: 	# first stage
 			# step1: recv grad
-			self.comm.recv(self.recv_stream, self.output_micro_batches_grad[micro_batch_idx], self.pp_next_rank, None, None)
-			# step2: backward
-			with cuda.stream(self.compute_stream):
-				self.compute_stream.wait_stream(self.recv_stream)	# synchronize
-				pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+			self.recv_stream.wait_stream(cuda.current_stream())			# for safe, sync
+			self.comm.recv(												# recv grads from next rank
+				self.recv_stream,
+				self.output_micro_batches_grad[micro_batch_idx],
+				self.pp_next_rank, None, None)
+			self.recv_stream.synchronize()								# make sure recv is over
+
+			# step2: backward under default stream
+			pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+
 			# step3: None
+			# step4: sync
+			cuda.current_stream().synchronize()							# make sure one step is over
 
 		else:	# middle stage
 			# step1: recv grad
-			self.comm.recv(self.recv_stream, self.output_micro_batches_grad[micro_batch_idx], self.pp_next_rank, None, None)
-			# step2: backward
-			with cuda.stream(self.compute_stream):
-				self.compute_stream.wait_stream(self.recv_stream)	# synchronize
-				pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+			self.recv_stream.wait_stream(cuda.current_stream())			# for safe
+			self.comm.recv(												# recv grads from next rank
+				self.recv_stream,
+				self.output_micro_batches_grad[micro_batch_idx],
+				self.pp_next_rank, None, None)
+			self.recv_stream.synchronize()								# make sure recv is over
+
+			# step2: backward under default stream as fw
+			pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
+
 			# step3: send grad
-			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, self.compute_stream, None)
+			self.send_stream.wait_stream(cuda.current_stream())			# make sure bw is over
+			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, None, None)
+
+			# step4: sync
+			self.send_stream.synchronize()								# make sure one step is over
 
 	def __call__(self, input_ids, targets):
 		"""

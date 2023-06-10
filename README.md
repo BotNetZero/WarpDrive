@@ -120,10 +120,9 @@ dpg: [(1,2,3), (4,5,6)]
 - quantization aware trainging: weights, buffers, actiovations
 
 6. timeline for CUDA streams  
-principles: 
 - default stream for computation, non-default stream for communication across ranks
-- different streams for each micro batch
-- parallel recomputing and communication
+- different streams for each micro batch, and synchronize micro-batches at all-reduce step. Since no relationship btw micro-batches, async is possible.
+- parallel recomputing and communication. recompute fw while recv grads from next rank
 ![avatar](./docs/imgs/timeline.jpg)
 
 7. compute graph
