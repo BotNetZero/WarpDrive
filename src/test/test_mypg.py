@@ -27,7 +27,6 @@ def main():
 
 	print("starting with master:", tcp_init)
 
-	#172.17.8.193
 	try:
 		group = mydist.new_process_group(
 			"g0",
@@ -39,7 +38,7 @@ def main():
 		)
 		end_time = datetime.datetime.now()
 		print("success... finished init PG at: ", end_time)
-		
+
 		mydist.close_process_group(group)
 		print("destroy PG.....")
 	except Exception as exc:

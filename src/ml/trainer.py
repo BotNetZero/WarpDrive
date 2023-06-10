@@ -6,7 +6,7 @@ Description   : trainer
 """
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 import torch.cuda as cuda
 from torch.amp.autocast_mode import autocast
 from src.common.logger import logger
@@ -153,7 +153,7 @@ class Trainer:
 		# schedule
 		# TODO: micro batch under stream control, synchronize at all reduce step
 		for action, micro_batch_idx in self.scheduler:
-			print("in rank [{self.pp_rank}], current action: {action}_{micro_batch_idx}")
+			print(f"in rank [{self.pp_rank}], current action: {action}_{micro_batch_idx}")
 			if action == "wait":
 				continue
 			elif action == "fw":
@@ -166,7 +166,7 @@ class Trainer:
 			else:
 				raise ValueError(f"action [{action}] not support YET!!")
 			#
-		# 
+		#
 		# all reduce
 		self.grad_scaler.step(self.optimizer)
 		self.lr_scheduler.step()
@@ -300,7 +300,7 @@ class Trainer:
 		3/ training step
 		"""
 		# sync scaler: make sure the whold pp group share the same scale
-		if self.pp_world_size > 1:
+		if self.pp_world_size > 1 and self.global_step > 0:
 			scales_buffer = [torch.ones_like(self.grad_scaler._scale) for _ in range(self.pp_world_size)]
 			self.comm.all_gather(self.grad_scaler._scale, scales_buffer, None, None)	# gather scale
 			new_scale = min([s.item() for s in scales_buffer])				# min

@@ -115,7 +115,8 @@ def pretrain():
 			global_input_ids = global_batch_X["input_ids"]				#
 
 			# input_ids_list = global_input_ids.chunk(dp_size)			# # TODO: 分发数据做data parallel
-			input_ids = global_input_ids.to(device)						# master rank的数据
+			# TODO: 一次性加载所有input_ids到GPU，会耗显存，可以按照micro-batch来加载
+			input_ids = global_input_ids.to(device)						# master rank的数据,
 			print("broadcast input ids:", input_ids)
 
 			# broadcast input data under data_stream
@@ -124,7 +125,7 @@ def pretrain():
 
 			# start training while broadcasting...
 			trainer(input_ids, None)									# one training step
-			
+
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
 			# 	evaluator()
@@ -136,6 +137,7 @@ def pretrain():
 	# last stage
 	elif pp_rank == pp_world_size-1:
 		while True:
+			# TODO: exception break
 			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
 			stop_stream.synchronize()									# make sure data is received
@@ -164,6 +166,7 @@ def pretrain():
 	# middle stage
 	else:
 		while True:
+			# TODO: exception break
 			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
 			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# recv stop_flag
 			stop_stream.synchronize()									# make sure data is received
