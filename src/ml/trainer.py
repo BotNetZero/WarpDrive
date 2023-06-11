@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.cuda as cuda
 from torch.amp.autocast_mode import autocast
+from torch.cuda.amp.grad_scaler import GradScaler
 from src.common.logger import logger
 from src.distributed.comm_utils import (
 	get_main_group_comm,
@@ -46,14 +47,13 @@ class Trainer:
 	2/ forward step
 	3/ backward step
 	"""
-	def __init__(self, args, configs, device, model, optimizer, lr_scheduler, grad_scaler) -> None:
+	def __init__(self, args, configs, device, model, optimizer, lr_scheduler) -> None:
 		"""
 		:param args:
 		:param device: current device
 		:param model:
 		:param optimizer:
 		:param lr_scheduler: LR scheduler for optimizer
-		:param grad_scaler:
 		"""
 		self.args = args
 		self.configs = configs
@@ -62,7 +62,7 @@ class Trainer:
 		self.model = model
 		self.optimizer = optimizer
 		self.lr_scheduler = lr_scheduler		#
-		self.grad_scaler = grad_scaler			#
+		#
 		self.comm = get_main_group_comm()		# dist. communicator
 		#
 		self.compute_stream = cuda.default_stream(device)	#
@@ -73,6 +73,7 @@ class Trainer:
 		self.pp_rank = get_pp_group_rank()
 		self.pp_prev_rank = get_pp_prev_global_rank()
 		self.pp_next_rank = get_pp_next_global_rank()
+		print(f"in rank [{self.pp_rank}], prev rank = [{self.pp_prev_rank}], next rank = [{self.pp_next_rank}]")
 		self.pp_world_size = get_pp_world_size()
 		# first stage
 		if self.pp_rank == 0:
@@ -80,7 +81,9 @@ class Trainer:
 			self.output_micro_batches_grad = [		# gradients from next stage
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
-					requires_grad=False, dtype=self.dtype, device=self.device
+					requires_grad=False,
+					dtype=self.dtype,
+					device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
 		# last stage
@@ -88,7 +91,9 @@ class Trainer:
 			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
-					requires_grad=True, dtype=self.dtype, device=self.device
+					requires_grad=True,
+					dtype=self.dtype,
+					device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
 			self.output_micro_batches_grad = None	#
@@ -97,7 +102,9 @@ class Trainer:
 			self.input_micro_batches = [			# input tensor with grad from previous rank
 				torch.zeros(
 					(self.args.micro_batch_size, self.args.seq_length, self.configs.hidden_size),
-					requires_grad=True, dtype=self.dtype, device=self.device
+					requires_grad=True,
+					dtype=self.dtype,
+					device=self.device
 				) for _ in range(self.args.micro_batch_num)
 			]
 			self.output_micro_batches_grad = [		# gradients from next stage
@@ -110,6 +117,11 @@ class Trainer:
 		# 全局数据
 		self.global_step = 0
 		self.scheduler = SequenceSchedule(self.args.micro_batch_num)
+		self.grad_scaler = GradScaler(
+			init_scale=args.initial_scale,
+			growth_interval=args.growth_interval,
+		)
+		self.grad_scaler._lazy_init_scale_growth_tracker(device)	# initial scaler sync: make sure the whold pp group share the same scale
 
 	def zero_input_grad(self):
 		"""
@@ -153,6 +165,7 @@ class Trainer:
 		# schedule
 		# TODO: micro batch under stream control, synchronize at all reduce step
 		for action, micro_batch_idx in self.scheduler:
+			print()
 			print(f"in rank [{self.pp_rank}], current action: {action}_{micro_batch_idx}")
 			if action == "wait":
 				continue
@@ -166,9 +179,10 @@ class Trainer:
 			else:
 				raise ValueError(f"action [{action}] not support YET!!")
 			#
+			cuda.empty_cache()
 		#
 		# all reduce
-		self.grad_scaler.step(self.optimizer)
+		self.grad_scaler.step(self.optimizer)	#
 		self.lr_scheduler.step()
 
 		self.grad_scaler.update()	# single rank scaler update
@@ -184,34 +198,43 @@ class Trainer:
 			# step1: None
 			# step2: fw under default stream
 			with autocast(device_type="cuda", dtype=self.dtype):
-				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
-
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx], ignore_checkpoint=True)
+				print(micro_pred.dtype)
+			micro_pred = micro_pred.half()
 			# step3: send
-			self.send_stream.wait_stream(cuda.current_stream())								# make sure fw is over and tensors for send is ready
-			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, None, None)		# send to next rank
+			# self.send_stream.wait_stream(cuda.current_stream(self.device))					# make sure fw is over and tensors for send is ready
+			self.comm.send(													# send to next rank
+				self.send_stream,
+				micro_pred,
+				self.pp_next_rank,
+				cuda.current_stream(self.device), None)
+			print("send preds:", micro_pred)
 
 			# step4: sync
 			self.send_stream.synchronize()													# make sure fw and send are over
 
 		elif self.pp_rank == self.pp_world_size-1:	# last stage
 			# step1: recv input
-			self.recv_stream.wait_stream(cuda.current_stream())								# for safe, synchronize
+			# self.recv_stream.wait_stream(cuda.current_stream(self.device))				# for safe, synchronize
 			self.comm.recv(																	# recv from prev rank
 				self.recv_stream,
 				self.input_micro_batches[micro_batch_idx],
-				self.pp_prev_rank, None, None)
+				self.pp_prev_rank,
+				cuda.current_stream(self.device), None)
 			self.recv_stream.synchronize()													# make sure recv is over
+			print("recv preds:", self.input_micro_batches[micro_batch_idx])
 
 			# step2: fw under default stream
 			with autocast(device_type="cuda", dtype=self.dtype):
-				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
+				micro_pred = self.model(self.input_micro_batches[micro_batch_idx], ignore_checkpoint=True)
+				print(micro_pred.dtype)
 			# step3: None
 			# step4: sync
-			cuda.current_stream().synchronize()												# make sure fw is over
+			cuda.current_stream(self.device).synchronize()												# make sure fw is over
 
 		else:	# middle stage
 			# step1: recv input
-			self.recv_stream.wait_stream(cuda.current_stream())								# for safe, synchronize
+			self.recv_stream.wait_stream(cuda.current_stream(self.device))								# for safe, synchronize
 			self.comm.recv(																	# recv from prev rank
 				self.recv_stream,
 				self.input_micro_batches[micro_batch_idx],
@@ -221,9 +244,9 @@ class Trainer:
 			# step2: fw under default stream
 			with autocast(device_type="cuda", dtype=self.dtype):
 				micro_pred = self.model(self.input_micro_batches[micro_batch_idx])
-
+			micro_pred = micro_pred.half()
 			# step3: send
-			self.send_stream.wait_stream(cuda.current_stream())								# make sure fw is over
+			self.send_stream.wait_stream(cuda.current_stream(self.device))								# make sure fw is over
 			self.comm.send(self.send_stream, micro_pred, self.pp_next_rank, None, None)		# send to next rank
 
 			# step4: sync
@@ -248,34 +271,38 @@ class Trainer:
 			self.grad_scaler.scale(loss).backward()
 
 			# step 3: send grad
-			self.send_stream.wait_stream(cuda.current_stream())			# make sure bw is over
+			self.send_stream.wait_stream(cuda.current_stream(self.device))			# make sure bw is over
 			self.comm.send(												# send grads to prev rank
 				self.send_stream,
 				self.input_micro_batches[micro_batch_idx].grad,
 				self.pp_prev_rank, None, None)
+
+			print("send grad:", self.input_micro_batches[micro_batch_idx].grad)
 
 			# step4: sync
 			self.send_stream.synchronize()								# make sure one step is over
 
 		elif self.pp_rank == 0: 	# first stage
 			# step1: recv grad
-			self.recv_stream.wait_stream(cuda.current_stream())			# for safe, sync
+			self.recv_stream.wait_stream(cuda.current_stream(self.device))			# for safe, sync
 			self.comm.recv(												# recv grads from next rank
 				self.recv_stream,
 				self.output_micro_batches_grad[micro_batch_idx],
 				self.pp_next_rank, None, None)
 			self.recv_stream.synchronize()								# make sure recv is over
 
+			print("recv grad: ", self.output_micro_batches_grad[micro_batch_idx])
+
 			# step2: backward under default stream
 			pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
 
 			# step3: None
 			# step4: sync
-			cuda.current_stream().synchronize()							# make sure one step is over
+			cuda.current_stream(self.device).synchronize()							# make sure one step is over
 
 		else:	# middle stage
 			# step1: recv grad
-			self.recv_stream.wait_stream(cuda.current_stream())			# for safe
+			self.recv_stream.wait_stream(cuda.current_stream(self.device))			# for safe
 			self.comm.recv(												# recv grads from next rank
 				self.recv_stream,
 				self.output_micro_batches_grad[micro_batch_idx],
@@ -286,7 +313,7 @@ class Trainer:
 			pred.backward(gradient=self.output_micro_batches_grad[micro_batch_idx])
 
 			# step3: send grad
-			self.send_stream.wait_stream(cuda.current_stream())			# make sure bw is over
+			self.send_stream.wait_stream(cuda.current_stream(self.device))			# make sure bw is over
 			self.comm.send(self.send_stream, self.input_micro_batches[micro_batch_idx].grad, self.pp_prev_rank, None, None)
 
 			# step4: sync
@@ -302,7 +329,11 @@ class Trainer:
 		# sync scaler: make sure the whold pp group share the same scale
 		if self.pp_world_size > 1 and self.global_step > 0:
 			scales_buffer = [torch.ones_like(self.grad_scaler._scale) for _ in range(self.pp_world_size)]
-			self.comm.all_gather(self.grad_scaler._scale, scales_buffer, None, None)	# gather scale
+			#
+			self.collect_stream.wait_stream(cuda.current_stream(self.device))
+			self.comm.all_gather(self.collect_stream, self.grad_scaler._scale, scales_buffer, None, None)	# gather scale
+			self.collect_stream.synchronize()
+			#
 			new_scale = min([s.item() for s in scales_buffer])				# min
 			self.grad_scaler.update(new_scale)								# sync
 
@@ -311,7 +342,7 @@ class Trainer:
 		self.optimizer.zero_grad(set_to_none=False)
 
 		#
-		self._step(input_ids, targets)
+		self._step(input_ids, targets)	# one training step
 
 		self.global_step += 1
 

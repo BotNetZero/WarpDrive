@@ -10,7 +10,6 @@ sys.path.append(os.getcwd())
 import traceback
 import torch
 import torch.cuda as cuda
-from torch.cuda.amp.grad_scaler import GradScaler
 from transformers import get_linear_schedule_with_warmup
 from src.utils.arguments import parse_args
 from src.distributed.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
@@ -55,12 +54,7 @@ def get_optimizer(args, configs, model, device):
 
 	lr_scheduler = get_linear_schedule_with_warmup(optimizer, args.warmup_steps, args.total_steps)
 
-	grad_scaler = GradScaler(
-		init_scale=args.initial_scale,
-		growth_interval=args.growth_interval,
-	)
-
-	return optimizer, lr_scheduler, grad_scaler
+	return optimizer, lr_scheduler
 
 
 def pretrain():
@@ -82,11 +76,13 @@ def pretrain():
 	tokenizer = Tokenizer(model_path)
 
 	model = get_model(args, configs, device)
+	if model.dtype == torch.float16:		# for GradScaler, which needs model.weights.dtype=fp32
+		model.float()
 	train_dataloader = get_train_data_loader(args, tokenizer)
-	optimizer, lr_scheduler, grad_scaler = get_optimizer(args, configs, model, device)
+	optimizer, lr_scheduler = get_optimizer(args, configs, model, device)
 
 	# traing & eval
-	trainer = Trainer(args, configs, device, model, optimizer, lr_scheduler, grad_scaler)
+	trainer = Trainer(args, configs, device, model, optimizer, lr_scheduler)
 	# evaluater = Evaluator()
 
 	#

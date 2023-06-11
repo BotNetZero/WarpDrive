@@ -8,9 +8,11 @@ import os, sys
 sys.path.append(os.getcwd())
 
 import torch
+from torch.amp.autocast_mode import autocast
 from src.common.constants import MODEL_PATH
 from src.ml.tokenizer import Tokenizer
 from src.ml.gptneox import GPTStageFull
+from src.ml.gptneox import GPTStageFirst
 from src.utils.arguments import parse_args
 from src.common.constants import MODEL_PATH
 
@@ -26,16 +28,18 @@ def main():
 		device = torch.device("cuda:0")
 	else:
 		device = "cpu"
-	model = GPTStageFull(args, configs, device)
-	
+	# model = GPTStageFull(args, configs, device)
+	model = GPTStageFirst(args, configs, device).float()
+
 	# print(model)
 
 	#
 	batch_encoding = tokenizer.tokenize([text]).to(device)
 	print(batch_encoding)
-	out = model(batch_encoding["input_ids"])
-	print(out)
-	print(out.shape)
+	with autocast(device_type="cuda", dtype=torch.float16):
+		out = model(batch_encoding["input_ids"])
+		print(out)
+		print(out.shape)
 
 if __name__ == "__main__":
 	main()
