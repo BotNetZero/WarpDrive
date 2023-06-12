@@ -29,40 +29,31 @@ class Communicator:
 		"""
 		raise NotImplementedError()
 
-	def send(self, send_stream, tensor, dst_rank, wait_stream, sub_pg):
+	def send(self, send_stream, tensor, dst_rank, sub_pg):
 		"""
 		execute send task under send_stream ctrl
 		:param send_stream: cuda stream for p2p send
 		:param tensor:
 		:param dst_rank: global rank of destination
-		:param wait_stream: synchronize with wait_stream
 		:param sub_pg:
 		"""
 		with cuda.stream(send_stream):
-			if wait_stream is not None:
-				send_stream.wait_stream(wait_stream)
 			dist.send(tensor, dst_rank, sub_pg)
 
-	def recv(self, recv_stream, tensor, src_rank, wait_stream, sub_pg):
+	def recv(self, recv_stream, tensor, src_rank, sub_pg):
 		with cuda.stream(recv_stream):
-			if wait_stream is not None:
-				recv_stream.wait_stream(wait_stream)
 			dist.recv(tensor, src_rank, sub_pg)
 
-	def broadcast(self, collective_stream, tensor, src_rank, wait_stream, sub_pg):
+	def broadcast(self, collective_stream, tensor, src_rank, sub_pg):
 		"""
 		execute broadcast task under collective_stream ctrl
 		"""
 		with cuda.stream(collective_stream):
-			if wait_stream is not None:
-				collective_stream.wait_stream(wait_stream)
 			dist.broadcast(tensor, src_rank, sub_pg)
 
-	def all_gather(self, collective_stream, tensor, output_tensor_list, wait_stream, sub_pg):
+	def all_gather(self, collective_stream, tensor, output_tensor_list, sub_pg):
 		"""
 		gather tensor from each rank into output_tensor_list
 		"""
 		with cuda.stream(collective_stream):
-			if wait_stream is not None:
-				collective_stream.wait_stream(wait_stream)
 			dist.all_gather(output_tensor_list, tensor, group=sub_pg)

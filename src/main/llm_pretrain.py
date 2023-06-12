@@ -12,10 +12,18 @@ import torch
 import torch.cuda as cuda
 from transformers import get_linear_schedule_with_warmup
 from src.utils.arguments import parse_args
-from src.distributed.comm_utils import init_distributed_env, destroy_distributed_env, get_main_group_comm, get_pp_group
-from src.distributed.comm_utils import get_pp_group_rank, get_pp_world_size, get_pp_prev_global_rank, get_pp_next_global_rank
-from src.data.data_utils import get_train_data_loader
 from src.common.constants import MODEL_PATH
+from src.common.logger import logger
+from src.distributed.comm_utils import (
+    init_distributed_env,
+    destroy_distributed_env,
+    get_main_group_comm,
+    get_pp_group,
+    get_pp_ranks,
+    get_pp_group_rank,
+    get_pp_world_size,
+)
+from src.data.data_utils import get_train_data_loader
 from src.ml.tokenizer import Tokenizer
 from src.ml.trainer import Trainer, Evaluator
 from src.ml.gptneox import GPTStageFirst, GPTStageLast, GPTStageMiddle, GPTStageFull
@@ -65,18 +73,23 @@ def pretrain():
 	init_distributed_env(args)
 	comm = get_main_group_comm()
 
-	pp_rank = get_pp_group_rank()
-	pp_world_size = get_pp_world_size()
-
+	pp_rank = get_pp_group_rank()				# current pp rank
+	pp_world_size = get_pp_world_size()			# current pp size
+	first_stage_rank = get_pp_ranks()[0]		# first stage rank of current pipe group
+	last_stage_rank  = get_pp_ranks()[-1]		# last stage rank of current pipe group
 	device = torch.device(args.cuda_id)
 	cuda.set_device(device)
+	logger.info(
+		f"current rank info: pp_rank [{pp_rank}], pp size [{pp_world_size}], "
+		f"first stage rank [{first_stage_rank}], last stage rank [{last_stage_rank}], device [{device}]"
+	)
 
 	# model, optimizer, dataloader
 	model_path = os.path.join(MODEL_PATH, "pythia_7b")
 	tokenizer = Tokenizer(model_path)
 
 	model = get_model(args, configs, device)
-	if model.dtype == torch.float16:		# for GradScaler, which needs model.weights.dtype=fp32
+	if model.dtype == torch.float16:		# for GradScaler, which needs fp32 model weights
 		model.float()
 	train_dataloader = get_train_data_loader(args, tokenizer)
 	optimizer, lr_scheduler = get_optimizer(args, configs, model, device)
@@ -88,39 +101,46 @@ def pretrain():
 	#
 	assert args.data_group_size == 1		# TODO: 暂时忽略data parallel
 
-	stop_flag = torch.zeros(1, dtype=torch.int32).to(device)					# barrier flag
-	input_ids = torch.zeros(													# recv from master rank
-		args.batch_size, args.seq_length, dtype=torch.long, device=device		#
+	stop_flag = torch.zeros(1, dtype=torch.int8).to(device)						# barrier flag
+	if configs.vocab_size < 4294967296:
+		input_dtype = torch.int
+	else:
+		input_dtype = torch.long
+	input_ids = torch.zeros(													# input for first stage, target for last stage
+		args.batch_size, args.seq_length, dtype=input_dtype, device=device
 	)
 	stop_stream = cuda.Stream(device)	# stream for stop flag broadcast
-	data_stream = cuda.Stream(device)	# stream for data broadcast
+	data_stream = cuda.Stream(device)	# stream for input_ids broadcast
 
 	# master rank: pp_rank 0, dp_rank 0
 	if pp_rank == 0:						# TODO: dp_rank也是判断条件
 		for _, global_batch_X in enumerate(train_dataloader, 1):		# master rank加载所有训练数据
 			#
-			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over and tensors for comm is ready
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			stop_stream.wait_stream(cuda.current_stream(device))		# make sure prev iteration is over and tensors for comm is ready
+			comm.broadcast(stop_stream, stop_flag, 0, None)				# broadcast stop_flag for all ranks
 			stop_stream.synchronize()									# make sure comm is finished, and all ranks get the same stop_flag
 
-			# under defult stream
+			# under default stream
 			if stop_flag.item() == 1:
-				print("finished training, then stop....")
+				logger.info("finished training, then stop....")
 				break
-			#
-			global_input_ids = global_batch_X["input_ids"]				#
 
-			# input_ids_list = global_input_ids.chunk(dp_size)			# # TODO: 分发数据做data parallel
-			# TODO: 一次性加载所有input_ids到GPU，会耗显存，可以按照micro-batch来加载
-			input_ids = global_input_ids.to(device)						# master rank的数据,
-			print("broadcast input ids:", input_ids)
+			# broadcast data across data group, pipe group
+			global_input_ids = global_batch_X["input_ids"]
 
-			# broadcast input data under data_stream
-			data_stream.wait_stream(cuda.current_stream())				# make sure tensors for comm is updated
-			comm.broadcast(data_stream, input_ids, 0, None, None)		# input_ids在last stage用作label数据
+			# input_ids_list = global_input_ids.chunk(args.data_group_size)		# TODO: 分发数据做data parallel
 
-			# start training while broadcasting...
-			trainer(input_ids, None)									# one training step
+			input_ids = global_input_ids.to(device)								# input data of current rank
+			# logger.info("broadcast input ids:", input_ids)
+
+			# send input data under data_stream
+			data_stream.wait_stream(cuda.current_stream(device))				# make sure tensors for comm is ready
+			comm.send(data_stream, input_ids, last_stage_rank, None)			# input_ids在last stage用作label数据
+
+			logger.info(f"before train step, memory allocated size: {cuda.memory_allocated()} bytes")
+
+			# start training while sending data...
+			trainer(input_ids, None)											# one training step
 
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
@@ -134,8 +154,8 @@ def pretrain():
 	elif pp_rank == pp_world_size-1:
 		while True:
 			# TODO: exception break
-			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# broadcast stop_flag for all ranks
+			stop_stream.wait_stream(cuda.current_stream(device))		# make sure prev iteration is over
+			comm.broadcast(stop_stream, stop_flag, 0, None)				# broadcast stop_flag for all ranks
 			stop_stream.synchronize()									# make sure data is received
 
 			# default stream
@@ -144,13 +164,13 @@ def pretrain():
 				break
 
 			# recv input_ids under data_stream
-			data_stream.wait_stream(cuda.current_stream())				# make sure stop_flag is checked
-			comm.broadcast(data_stream, input_ids, 0, None, None)		# recv input_ids
+			data_stream.wait_stream(cuda.current_stream(device))		# make sure stop_flag is checked
+			comm.recv(data_stream, input_ids, first_stage_rank, None)	# recv input_ids
 			data_stream.synchronize()									# make sure comm is finished
 
 			# default stream
-			print("broadcast input ids:", input_ids)
-			labels = input_ids.clone()
+			# logger.info("recv input ids:", input_ids)
+			labels = input_ids.clone().to(dtype=torch.long)				# int64 for loss_fn
 
 			# one training step
 			trainer(None, labels)										# one training step
@@ -163,22 +183,22 @@ def pretrain():
 	else:
 		while True:
 			# TODO: exception break
-			stop_stream.wait_stream(cuda.current_stream())				# make sure prev iteration is over
-			comm.broadcast(stop_stream, stop_flag, 0, None, None)		# recv stop_flag
-			stop_stream.synchronize()									# make sure data is received
+			stop_stream.wait_stream(cuda.current_stream(device))	# make sure prev iteration is over
+			comm.broadcast(stop_stream, stop_flag, 0, None)			# recv stop_flag
+			stop_stream.synchronize()								# make sure data is received
 
 			# under default stream
 			if stop_flag.item() == 1:
 				print("finished training, then stop....")
 				break
 
-			# recv input_ids
-			data_stream.wait_stream(cuda.current_stream())				# make sure stop_flag is checked
-			comm.broadcast(data_stream, input_ids, 0, None, None)		# TODO: 改进communicator, 在subgroup中做broadcast
-			# data_stream.synchronize()									# middle stage don't use input_ids, therefore no synchronize...
+			# # recv input_ids
+			# data_stream.wait_stream(cuda.current_stream(device))	# make sure stop_flag is checked
+			# comm.broadcast(data_stream, input_ids, 0, None)
+			# # data_stream.synchronize()							# middle stage don't use input_ids, therefore no synchronize...
 
 			# starting training while broadcasting
-			trainer(None, None)											# one training step
+			trainer(None, None)										# one training step
 
 			# # TODO: evaluator
 			# if trainer.global_step % args.evaluation_steps == 0:
