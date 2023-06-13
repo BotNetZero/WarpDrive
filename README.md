@@ -28,7 +28,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: Pythia7B
 	- :stop_sign: parallel models
 10. :building_construction: llm training
-	- :building_construction: pretrain
+	- :white_check_mark: pretrain
 	- :stop_sign: RLHF
 	- :stop_sign: RLAI
 11. :stop_sign: llm evaluation
@@ -45,8 +45,13 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 14. :stop_sign: Adapter
 	- :stop_sign: Lora, QLoRa
 
-15. :building_construction: logs for training error debug 
+15. :building_construction: system debug & monitor
+	- :building_construction: GPU memory profile
+	- :building_construction: comm data sync debug
+	- :building_construction: loss convergence
+
 16. :stop_sign: compute graph for distributed computing
+
 
 ## GPUs topology
 cluster环境下的均配结构: world_size = pp_size * dp_size * tp_size
@@ -130,6 +135,8 @@ dpg: [(1,2,3), (4,5,6)]
 - use autograd and CUDA stream to arange ops, micro batches in order
 ![avatar](./docs/imgs/compute_graph.jpg)
 
+8. system debug & monitor
+- torch.profile + tensorboard
 
 ## training data
 Open source training data

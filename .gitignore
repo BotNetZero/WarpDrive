@@ -5,3 +5,4 @@ local/
 datafiles
 saved_models
 src/tmp
+runs
