@@ -38,7 +38,7 @@ with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
 				on_trace_ready=tensorboard_trace_handler("./logs/test"),
 				record_shapes=True,
 				profile_memory=True,
-				with_stack=True,
+				#with_stack=True,
 				with_flops=True,
 				with_modules=True) as prof:
 	for i, global_batch_X in enumerate(train_dataloader, 1):
@@ -50,7 +50,7 @@ with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
 			# print(preds)
 			loss = loss_func(preds, targets)
 			print(loss)
-
+		memory_status()
 		prof.step()
 
 		if i > 10:

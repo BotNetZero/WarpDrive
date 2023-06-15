@@ -114,8 +114,9 @@ class GPTStageFull(GPTStageBase):
 		"""
 		"""
 		def model_forward(x_, **kwargs):
-			for module in self.model[1:]:	# exclude embedding layer
+			for i, module in enumerate(self.model[1:], 1):	# exclude embedding layer
 				x_ = module(x_, **kwargs)
+				print(f"layer [{i}], hidden: {x_.dtype}")
 			return x_
 		logits = checkpoint(model_forward, x, **kwargs)
 		return logits
@@ -124,13 +125,15 @@ class GPTStageFull(GPTStageBase):
 		# for activation checkpointing, embedding layer can't no_grad
 		# or computing graph can't be built by autograd
 		hidden = self.model[0](x)		# embedding layer, [batch_size, seq_len, emb_size]
+		print("emb layer, hidden:", hidden.dtype)
 		#
 		if self.recompute_activations and not ignore_checkpoint:
 			logits = self._checkpoint_forward(hidden, **kwargs)
 			return logits
 		else:
-			for module in self.model[1:]:	# exclude embedding layer
+			for i, module in enumerate(self.model[1:], 1):	# exclude embedding layer
 				hidden = module(hidden, **kwargs)
+				print(f"layer [{i}], hidden: {hidden.dtype}")
 			return hidden
 
 

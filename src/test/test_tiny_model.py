@@ -39,18 +39,34 @@ def main():
 	memory_status()
 
 	#
-	for _, global_batch_X in enumerate(train_dataloader, 1):
+	for i, global_batch_X in enumerate(train_dataloader, 1):
+		print("step:", i)
 		input_ids = global_batch_X["input_ids"].to(device)
 		targets = input_ids.clone().to(torch.long)
 		with autocast(device_type="cuda", dtype=torch.float16):
 			preds = model(input_ids)
-			print(preds)
+			# print(preds)
+			del input_ids
 			loss = loss_func(preds, targets)
 			print(loss)
-		print()
+
+		del preds
+		del targets
+
+		print("after forward:")
 		memory_status()
-		break
+
+		# loss.backward()
+		# print("after backward:")
+		# memory_status()
+		print()
+
+		if i > 5:
+			break
 
 
 if __name__ == "__main__":
 	main()
+
+
+# python3 src/test/test_tiny_model.py --num_layers 3 --recompute_activations --batch_size 4 --micro_batch_num 4

@@ -33,10 +33,11 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :stop_sign: RLAI
 11. :stop_sign: llm evaluation
 12. :building_construction: model compression
-	- :white_check_mark: empty model init, device map, sequntial loading
+	- :white_check_mark: empty model init, device map, sequential loading
 	- :white_check_mark: mixed precision training
 		- :white_check_mark: fp16 (GPU), loss scale
 		- :white_check_mark: bf16 (CPU, GPU), no loss scale
+		- :building_construction: quanz operation
 	- :building_construction: quantization
 	- :stop_sign: pruning
 13. :building_construction: optimizer
@@ -117,7 +118,8 @@ dpg: [(1,2,3), (4,5,6)]
 ![avatar](./docs/imgs/mixed_precision_training.jpg)
 
 > Mixed precision primarily benefits Tensor Core-enabled architectures (Volta, Turing, Ampere). 
-> torch.autocast automatically chooses the precision for GPU operations to improve performance while maintaining accuracy.
+**NOTE:**   
+torch.autocast doesn't support mixed precision well, some ops can't be autocasted. 
 
 
 5. Quantization

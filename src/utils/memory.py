@@ -30,8 +30,7 @@ def memory_status(reset_max=False):
 	record cuda memory status
 	"""
 	if reset_max:
-		cuda.reset_max_memory_cached()
-		cuda.reset_max_memory_allocated()
+		cuda.reset_peak_memory_stats()
 
 	new_alloced = cuda.memory_allocated()
 	new_cached  = cuda.memory_reserved()

@@ -32,10 +32,17 @@ def loss_func(logits, targets):
 	shift_logits = logits[..., :-1, :].contiguous()		# prev tokens' logits: [batch_size, seq_len, vocab_size]
 	shift_labels = targets[..., 1:].contiguous()		# next tokens label id: [batch_size, seq_len]
 
-	unfold_logits = shift_logits.view(-1, shift_logits.size(-1)) 	# [batch_size*seq_len, vocab_size]
-	unfold_labels = shift_labels.view(-1)							# target: [batch_size*seq_len]
+	# unfold_logits = shift_logits.view(-1, shift_logits.size(-1)) 	# [batch_size*seq_len, vocab_size]
+	# unfold_labels = shift_labels.view(-1)							# target: [batch_size*seq_len]
+
 	#
-	loss = F.cross_entropy(unfold_logits, unfold_labels)
+	# loss = F.cross_entropy(unfold_logits, unfold_labels)
+	loss = F.cross_entropy(
+		shift_logits.view(-1, shift_logits.size(-1)),
+		shift_labels.view(-1)
+	)
+	del shift_labels
+	del shift_logits
 
 	return loss
 
