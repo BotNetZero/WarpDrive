@@ -4,7 +4,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 ## tasks:
 1. :building_construction: topology:
 	- :white_check_mark: cluster mode
-	- :building_construction: CS mode
+	- :stop sign: CS mode
 2. :building_construction: distributed communication (optimize c10d)
 	- :white_check_mark: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
@@ -26,6 +26,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: streaming style dataset, w/o padding
 9. :building_construction: models
 	- :white_check_mark: Pythia7B
+	- :building_construction: a transformer with sparse attention and much longer sequence (len>>2048)
 	- :stop_sign: parallel models
 10. :building_construction: llm training
 	- :white_check_mark: pretrain
@@ -139,6 +140,11 @@ torch.autocast doesn't support mixed precision well, some ops can't be autocaste
 
 8. system debug & monitor
 - torch.profile + tensorboard
+
+9. sparse transformer
+- sparse attention
+- longer sequence 
+
 
 ## training data
 Open source training data
