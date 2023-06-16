@@ -13,7 +13,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :building_construction: timeline for cuda stream sync
 3. :building_construction: models
 	- :white_check_mark: Pythia7B
-	- :building_construction: sparse transformer: **sparse attention($\mathcal{O}(N\log{N})$), then much longer sequence (len>>2048)**
+	- :building_construction: sparse transformer: sparse attention($\mathcal{O}(N\log{N})$), then much longer sequence (len>>2048)
 	- :stop_sign: parallel models
 4. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
@@ -105,7 +105,7 @@ dpg: [(1,2,3), (4,5,6)]
 	- sequence 
 	- 1f1b w/o interleave
 	- 1f1b with interleave
-![avatar](./docs/imgs/pipeline_schedule.jpg)
+	![avatar](./docs/imgs/pipeline_schedule.jpg)
 
 - learning rate schedule:
 
