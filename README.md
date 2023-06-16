@@ -11,23 +11,23 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 	- :white_check_mark: P2P comm
 	- :white_check_mark: collective comm
 	- :building_construction: timeline for cuda stream sync
-3. :building_construction: pipeline parallel 
+3. :building_construction: models
+	- :white_check_mark: Pythia7B
+	- :building_construction: sparse transformer: sparse attention, then much longer sequence (len>>2048)
+	- :stop_sign: parallel models
+4. :building_construction: pipeline parallel 
 	- :white_check_mark: staged model
 	- :white_check_mark: sequence pipeline schedule
 	- :stop_sign: 1f1b, interleave schedule
-4. :building_construction: activation recomputation
+5. :building_construction: activation recomputation
 	- :white_check_mark: full mode
 	- :stop_sign: selective mode
-5. :stop_sign: data parallel
-6. :stop_sign: tensor parallel
-7. :stop_sign: sequence parallel
-8. :white_check_mark: training data (open source)
+6. :stop_sign: data parallel
+7. :stop_sign: tensor parallel
+8. :stop_sign: sequence parallel
+9. :white_check_mark: training data (open source)
 	- :white_check_mark: OIG
 	- :white_check_mark: streaming style dataset, w/o padding
-9. :building_construction: models
-	- :white_check_mark: Pythia7B
-	- :building_construction: a transformer with sparse attention and much longer sequence (len>>2048)
-	- :stop_sign: parallel models
 10. :building_construction: llm training
 	- :white_check_mark: pretrain
 	- :stop_sign: RLHF
