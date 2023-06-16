@@ -4,7 +4,7 @@ a LLM training/inference engine under cluster, CS(Client-Server) environment
 ## tasks:
 1. :building_construction: topology:
 	- :white_check_mark: cluster mode
-	- :stop sign: CS mode
+	- :stop_sign: CS mode
 2. :building_construction: distributed communication (optimize c10d)
 	- :white_check_mark: group, subgroup
 	- :white_check_mark: fix _store_based_barrier
